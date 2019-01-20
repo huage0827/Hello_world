@@ -1,0 +1,9 @@
+#!/bin/sh
+
+rm *.o
+gcc -fPIC -c -I/usr/simulab/common/include/pub -I/usr/simulab/SimulinkAPI -DLINUX_PLATFORM SL_UdpDispData_Sfun_wrapper.c -g -o SL_UdpDispData_Sfun_wrapper.o 
+gcc -fPIC -c -I/usr/simulab/common/include/pub -I/usr/simulab/SimulinkAPI -DLINUX_PLATFORM SL_SyncIn_Sfun_wrapper.c -g -o SL_SyncIn_Sfun_wrapper.o 
+gcc -fPIC -c -I/usr/simulab/common/include/pub -I/usr/simulab/SimulinkAPI -DLINUX_PLATFORM SL_SyncOut_Sfun_wrapper.c -g -o SL_SyncOut_Sfun_wrapper.o
+
+gcc -shared -g -o libsldataout.so SL_UdpDispData_Sfun_wrapper.o SL_SyncIn_Sfun_wrapper.o SL_SyncOut_Sfun_wrapper.o
+
