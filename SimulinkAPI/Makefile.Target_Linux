@@ -1,0 +1,63 @@
+SHELL = /bin/sh
+
+# compiler
+CC = gcc
+
+# path
+ROOT_PATH = ..
+COMM_INC_PATH = $(ROOT_PATH)/common/include
+COMM_SRC_PATH = $(ROOT_PATH)/common/source
+SIMU_LIB_PATH = $(ROOT_PATH)/Output
+SIMU_CUR_PATH = $(ROOT_PATH)/SimulinkAPI
+TINY_XML_PATH = $(ROOT_PATH)/common/tinyxml
+
+# file
+INCLUDE = -I$(COMM_INC_PATH)/pub \
+	-I$(COMM_INC_PATH)/linux \
+	-I$(SIMU_CUR_PATH) \
+	-I$(TINY_XML_PATH) \
+	-I./
+
+OBJS = $(SIMU_CUR_PATH)/SimuClockMgr_Linux.o \
+	$(SIMU_CUR_PATH)/SimulinkCfgParser.o \
+	$(SIMU_CUR_PATH)/SimulinkDataSync.o \
+	$(SIMU_CUR_PATH)/SimulinkM_CComm.o \
+	$(SIMU_CUR_PATH)/SimulinkOutPrint.o \
+	$(SIMU_CUR_PATH)/MyList.o
+
+# target	
+ifdef DEBUG
+	TARGET = libSimulinkAPI_g.so
+else
+	TARGET = libSimulinkAPI.so
+endif
+
+#compile option
+ifdef DEBUG
+LFLAGS += -g
+endif
+LFLAGS += -W1
+LFLAGS += -shared
+
+ifdef DEBUG
+CFLAGS += -g
+endif
+CFLAGS += $(INCLUDE) 
+CFLAGS += -DLINUX_PLATFORM
+CFLAGS += -fPIC
+
+# needed lib
+LIBS = -L../Output -lpthread -lrt -lm
+
+#default 
+default: $(TARGET)
+$(TARGET): $(OBJS)
+	$(CC) $(LFLAGS) -o $(TARGET) $(OBJS) $(LIBS)
+	
+$(OBJS): %.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@ 
+
+#clean 
+.PHONY: clean
+clean:
+	-rm -f $(OBJS) $(TARGET) 
