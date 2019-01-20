@@ -1,0 +1,30 @@
+/*****************************************************************
+ * ÎÄ¼þÃû: Platform.h
+ *****************************************************************/
+#pragma once
+
+#ifndef WIN_PLATFORM
+#define QNX_PLATFORM
+#endif
+
+#define IN
+#define OUT
+
+#ifdef QNX_PLATFORM
+#include "QNXPlatform.h"
+
+#define EXPORT_DLL
+
+#else
+#include "windows.h"
+#include <WinBase.h>
+#include <WinError.h>
+#include "winsock.h"
+#include "stdio.h"
+
+#ifdef EXPORTDLL
+#define EXPORT_DLL __declspec(dllexport)
+#else
+#define EXPORT_DLL __declspec(dllimport)
+#endif
+#endif

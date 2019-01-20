@@ -1,0 +1,35 @@
+/*******************************************************************
+ * 文件名: SimuS_GCmdExecutorInterface.h
+ * 功能: SimuService与SimuGuard之间的通信命令执行器接口定义
+ ******************************************************************/
+#pragma once
+
+#ifndef WIN_PLATFORM
+#include "stdafx.h"
+#endif
+
+#include "SimuS_GCmd.h"
+
+/****************************************************************
+ * 类名 : CSimuS_GCmdExecutorInterface
+ * 父类 : 无
+ * 说明 : SimuService和SimuGuard之间通信命令执行器父类
+ ****************************************************************/
+class CSimuS_GCmdExecutorInterface
+{
+public:
+
+	virtual BOOL ExecLoadSimuModelCmd(CSimuS_GLoadSimuModelCmd* pCmd);	
+	virtual BOOL ExecLoadSimuModelRespCmd(CSimuS_GLoadSimuModelRespCmd* pCmd);	
+	virtual BOOL ExecExecSimuModelCmd(CSimuS_GExecSimuModelCmd* pCmd);	
+	virtual BOOL ExecExecSimuModelRespCmd(CSimuS_GExecSimuModelRespCmd* pCmd);	
+	virtual BOOL ExecPauseSimuModelCmd(CSimuS_GPauseSimuModelCmd* pCmd);	
+	virtual BOOL ExecPauseSimuModelRespCmd(CSimuS_GPauseSimuModelRespCmd* pCmd);	
+	virtual BOOL ExecResetSimuModelCmd(CSimuS_GResetSimuModelCmd* pCmd);	
+	virtual BOOL ExecResetSimuModelRespCmd(CSimuS_GResetSimuModelRespCmd* pCmd);	
+	virtual BOOL ExecSetModelParamCmd(CSimuS_GSetSimuModelParamCmd* pCmd);	
+	virtual BOOL ExecSetModelParamRespCmd(CSimuS_GSetSimuModelParamRespCmd* pCmd);
+	virtual BOOL ExecTestEventReportCmd(CSimuS_GTestEventReportCmd* pCmd);	
+	virtual BOOL ExecExceptEventReportCmd(CSimuS_GExceptEventReportCmd* pCmd);	
+
+};

@@ -1,0 +1,49 @@
+/*****************************************************************
+ * 文件名: SimuD_SCmdParser.h
+ * 功能: SimuMonitor和SimuService之间通信命令执行和解析器定义
+ *****************************************************************/
+#pragma once
+
+#include <vector>
+#include "SimuCommAPI.h"
+#include "SimuD_SCmdExecutorInterface.h"
+
+using namespace std;
+
+/****************************************************************
+ * 类名 : CSimuD_SCmdParser
+ * 父类 : 无
+ * 说明 : SimuMonitor和SimuService之间通信命令解析器
+ ****************************************************************/
+class CSimuD_SCmdParser
+{
+	friend DWORD WINAPI SimuD_SCmdParseThread(LPVOID lpParam);
+public :
+	CSimuD_SCmdParser(CSimuD_SCmdExecutorInferface* pExecutorInterface);
+	virtual ~CSimuD_SCmdParser();
+
+	/* 初始化命令解析器 */
+	BOOL Initialize();																					
+	
+	/* 卸载命令解析器并释放资源 */
+	void Uninitialize();
+	
+	/* 把指定的数据解析成命令执行器可执行的命令 */
+	BOOL Parse(unsigned char* szData , unsigned long nDataLen);	
+
+protected:
+
+	/* 执行所有已解析成功的命令，由命令解析器的辅助线程调用 */
+	BOOL ExecAllCmd();																					
+
+private:
+
+	BOOL									m_bInitialize;	/* 是否已初始化 */
+	vector<CSimuD_SCmd*>					m_vecCmd;	    /* 命令集合 */
+	CRITICAL_SECTION						m_criCmd;		/* 访问命令的临界区 */
+	unsigned char							*m_szBuffer;	/* 传送到命令解析器中的数据缓冲区 */
+	unsigned long							m_nBufferLen;	/* 传送到命令解析器中的数据缓冲区长度 */
+	HANDLE									m_hParseThread;	/* 命令解析器辅助线程的句柄 */
+	HANDLE									m_hParseEvent;	/* 停止命令解析器辅助线程的事件句柄 */
+	CSimuD_SCmdExecutorInferface*			m_pCmdExecutorInterface; /* 对应的命令执行器 */
+};

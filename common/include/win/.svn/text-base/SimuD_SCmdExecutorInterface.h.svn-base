@@ -1,0 +1,33 @@
+/*******************************************************************
+ * 文件名: SimuD_SCmdExecutorInterface.h
+ * 功能: SimuMonitor与SimuService之间的通信命令执行器接口定义
+ ******************************************************************/
+
+#pragma once
+
+#include "SimuD_SCmd.h"
+
+/****************************************************************
+ * 类名 : CSimuD_SCmdExecutorInferface
+ * 父类 : 无
+ * 说明 : SimuMonitor和SimuService之间通信命令执行器接口
+ ****************************************************************/
+class CSimuD_SCmdExecutorInferface
+{
+public:
+	virtual BOOL ExecInitMonitorCmd(CSimuD_SInitMonitorCmd* pCmd);
+	virtual BOOL ExecInitMonitorRespCmd(CSimuD_SInitMonitorRespCmd *pCmd);
+	virtual BOOL ExecLoadSimuModelReportCmd(CSimuD_SLoadSimuModelReportCmd *pCmd);
+	virtual BOOL ExecExecSimuModelCmd(CSimuD_SExecSimuModelCmd *pCmd);
+	virtual BOOL ExecExecSimuModelRespCmd(CSimuD_SExecSimuModelRespCmd *pCmd);
+	virtual BOOL ExecPauseSimuModelCmd(CSimuD_SPauseSimuModelCmd *pCmd);
+	virtual BOOL ExecPauseSimuModelRespCmd(CSimuD_SPauseSimuModelRespCmd *pCmd);
+	virtual BOOL ExecResetSimuModelCmd(CSimuD_SResetSimuModelCmd *pCmd);
+	virtual BOOL ExecResetSimuModelRespCmd(CSimuD_SResetSimuModelRespCmd *pCmd);
+	virtual BOOL ExecSetSimuModelParamCmd(CSimuD_SSetSimuModelParamCmd *pCmd);
+	virtual BOOL ExecSetSimuModelParamRespCmd(CSimuD_SSetSimuModelParamRespCmd *pCmd);
+	virtual BOOL ExecTestEventReportCmd(CSimuD_STestEventReportCmd *pCmd);
+	virtual BOOL ExecExceptEventReportCmd(CSimuD_SExceptEventReportCmd *pCmd);
+	virtual BOOL ExecEnableSimuMonitorCmd(CSimuD_SEnableSimuMonitorCmd *pCmd);
+	virtual BOOL ExecEnableSimuMonitorRespCmd(CSimuD_SEnableSimuMonitorRespCmd *pCmd);
+};

@@ -1,0 +1,80 @@
+/*******************************************************************
+ * 文件名: SimuS_GCmdExecutorInterface.cpp
+ * 功能: SimuService与SimuGuard之间的通信命令执行器接口实现
+ ******************************************************************/
+#include "stdafx.h"
+#include "SimuS_GCmdExecutorInterface.h"
+
+BOOL CSimuS_GCmdExecutorInterface::ExecLoadSimuModelCmd(CSimuS_GLoadSimuModelCmd* pCmd)
+{
+	printf("ExecLoadSimuModelCmd\n");
+	return TRUE;
+}	
+
+BOOL CSimuS_GCmdExecutorInterface::ExecLoadSimuModelRespCmd(CSimuS_GLoadSimuModelRespCmd* pCmd)
+{
+	printf("ExecLoadSimuModelRespCmd\n");
+	return TRUE;
+}	
+
+BOOL CSimuS_GCmdExecutorInterface::ExecExecSimuModelCmd(CSimuS_GExecSimuModelCmd* pCmd)
+{
+	printf("ExecExecSimuModelCmd\n");
+	return TRUE;
+}	
+
+BOOL CSimuS_GCmdExecutorInterface::ExecExecSimuModelRespCmd(CSimuS_GExecSimuModelRespCmd* pCmd)
+{
+	printf("ExecExecSimuModelRespCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecPauseSimuModelCmd(CSimuS_GPauseSimuModelCmd* pCmd)
+{
+	printf("ExecPauseSimuModelCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecPauseSimuModelRespCmd(CSimuS_GPauseSimuModelRespCmd* pCmd)
+{
+	printf("ExecPauseSimuModelRespCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecResetSimuModelCmd(CSimuS_GResetSimuModelCmd* pCmd)
+{
+	printf("ExecResetSimuModelCmd\n");
+	return TRUE;
+}
+
+
+BOOL CSimuS_GCmdExecutorInterface::ExecResetSimuModelRespCmd(CSimuS_GResetSimuModelRespCmd* pCmd)
+{
+	printf("ExecResetSimuModelRespCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecSetModelParamCmd(CSimuS_GSetSimuModelParamCmd* pCmd)
+{
+	printf("ExecSetModelParamCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecSetModelParamRespCmd(CSimuS_GSetSimuModelParamRespCmd* pCmd)
+{
+	printf("ExecSetModelParamRespCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecTestEventReportCmd(CSimuS_GTestEventReportCmd* pCmd)
+{
+	printf("ExecTestEventReportCmd\n");
+	return TRUE;
+}
+
+BOOL CSimuS_GCmdExecutorInterface::ExecExceptEventReportCmd(CSimuS_GExceptEventReportCmd* pCmd)
+{
+	printf("ExecExceptEventReportCmd\n");
+	return TRUE;
+}
+

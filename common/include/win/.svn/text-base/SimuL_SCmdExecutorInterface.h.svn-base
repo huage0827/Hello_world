@@ -1,0 +1,24 @@
+/*******************************************************************
+ * 文件名: SimuL_SCmdExecutorInterface.h
+ * 功能: SimuLab与SimuService之间的通信命令执行器接口定义
+ ******************************************************************/
+
+#pragma once
+
+#include "SimuL_SCmd.h"
+
+/****************************************************************
+ * 类名 : CSimuL_SCmdExecutorInterface
+ * 父类 : 无
+ * 说明 : SimuLab和SimuService之间通信命令执行器接口
+ ****************************************************************/
+class CSimuL_SCmdExecutorInterface
+{
+public:
+	virtual BOOL ExecConnectTargetCmd(CSimuL_SConnectTargetCmd* pCmd);		/* 执行连接SimuGuard请求命令 */
+	virtual BOOL ExecConnectTargetRespCmd(CSimuL_SConnectTargetRespCmd* pCmd);/* 执行连接SimuGuard响应命令 */
+	virtual BOOL ExecLoadSimuModelCmd(CSimuL_SLoadSimuModelCmd* pCmd);			/* 执行加载仿真模型请求命令 */
+	virtual BOOL ExecLoadSimuModelRespCmd(CSimuL_SLoadSimuModelRespCmd* pCmd);	/* 执行加载仿真模型响应命令 */
+	virtual BOOL ExecEnableSimuMonitorCmd(CSimuL_SEnableSimuMonitorCmd *pCmd);
+	virtual BOOL ExecEnableSimuMonitorRespCmd(CSimuL_SEnableSimuMonitorRespCmd *pCmd);
+};

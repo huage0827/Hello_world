@@ -1,0 +1,1267 @@
+/*****************************************************************
+ * 文件名: SimuS_GCmd.cpp
+ * 功能: SimuService和SimuGuard之间通信命令实现
+ *
+ *****************************************************************/
+#include "stdafx.h"
+#include "SimuS_GCmd.h"
+#include "Util.h"
+#include <string.h>
+
+using namespace std;
+
+#define MAX_PRINT_BUFFER_LEN 8192
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmd::CSimuS_GCmd
+ *  功能：		SimuService和SimuGuard之间通信的所有命令的父类构造函数
+ *  入参:		S_G_CMD sgc -- 命令字
+ *  出参:		无
+ *  返回值:		无
+ *****************************************************************/
+CSimuS_GCmd::CSimuS_GCmd(S_G_CMD sgc)
+{
+	m_sgc = sgc;
+	memset(m_szVersion , 0 , sizeof(m_szVersion));
+	m_szVersion[0] = 0;
+	m_szVersion[2] = 1;
+	m_szVersion[3] = 0;
+	m_szVersion[4] = 0;
+	m_nFrameLen = 0;
+	m_nCmd = sgc;
+	m_nFrameBodyLen = 0;
+	memset(m_szSimuProjectID , 0 , sizeof(m_szSimuProjectID));
+	memset(m_szSimuModelID , 0 , sizeof(m_szSimuModelID));
+	memset(m_szReserved2 , 0 , sizeof(m_szReserved2));
+	memset(m_szReserved3 , 0 , sizeof(m_szReserved3));
+	memset(m_szReserved4 , 0 , sizeof(m_szReserved4));
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmd::~CSimuS_GCmd
+ *  功能：		SimuService和SimuGuard之间通信的所有命令的父类析构函数
+ *  入参:		S_G_CMD sgc -- 命令字
+ *  出参:		无
+ *  返回值:		无
+ *****************************************************************/
+CSimuS_GCmd::~CSimuS_GCmd()
+{
+
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::PreParseCmd
+ *  功能：  预解析数据 , 获得响应的命令
+ *  入参:   unsigned char* szBuffer -- 数据缓冲区
+ *			unsigned long nBufferLen -- 数据缓冲区长度
+ *  出参:	unsigned long& nCmdDataLen -- 命令实际的长度
+ *  返回值:	预解析获得的命令字
+ *****************************************************************/
+S_G_CMD CSimuS_GCmd::PreParseCmd(unsigned char* szBuffer , unsigned long nBufferLen , unsigned long& nCmdDataLen)
+{
+	S_G_CMD sgc = S_G_CMD_UNKNOWN;
+
+	if( nBufferLen < S_G_CMD_HEADER_SIZE )
+		return S_G_CMD_UNKNOWN;
+
+	memcpy((void*)&nCmdDataLen , szBuffer + S_G_CMD_POS_FRAMELEN , S_G_CMD_SIZE_FRAMELEN);
+
+	if( nBufferLen < nCmdDataLen )
+		return S_G_CMD_UNKNOWN;
+
+	memcpy((void*)&sgc , szBuffer + S_G_CMD_POS_COMMAND , S_G_CMD_SIZE_COMMAND);
+
+	return sgc;
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::GetCmdType
+ *  功能：  获取该命令的命令字
+ *  入参:   无
+ *  返回值:	命令字
+ *****************************************************************/
+S_G_CMD CSimuS_GCmd::GetCmdType() const
+{
+	return m_sgc;
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::SetSimuProjectID
+ *  功能：  设置该命令所属的仿真工程ID号
+ *  入参:   const char* szId -- 仿真工程ID号
+ *  出参:	无
+ *  返回值:	无
+ *****************************************************************/
+void CSimuS_GCmd::SetSimuProjectID(const unsigned char* szId)
+{
+	memset(m_szSimuProjectID , 0 , sizeof(m_szSimuProjectID));
+	memcpy(m_szSimuProjectID , szId , sizeof(m_szSimuProjectID));
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::GetFrameLen
+ *  功能：  获取命令帧长度
+ *  入参:   无
+ *  出参:	无
+ *  返回值:	命令帧长度
+ *****************************************************************/
+unsigned long CSimuS_GCmd::GetFrameLen()
+{
+	return m_nFrameLen;
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::GetFrameBodyLen
+ *  功能：  获取命令帧体长度
+ *  入参:   无
+ *  出参:	无
+ *  返回值:	命令帧体长度
+ *****************************************************************/
+unsigned long CSimuS_GCmd::GetFrameBodyLen()
+{
+	return m_nFrameBodyLen;
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::GetSimuProjectID
+ *  功能：  获取该命令所属的仿真工程ID号
+ *  入参:   无
+ *  出参:	char* szId -- 命令所属的仿真工程ID号
+ *  返回值:	无
+ *****************************************************************/
+void CSimuS_GCmd::GetSimuProjectID(unsigned char* szId)
+{
+	if( szId == NULL )
+		return ;
+	memcpy(szId , m_szSimuProjectID , sizeof(m_szSimuProjectID));
+}
+
+
+void CSimuS_GCmd::SetSimuModelID(const unsigned char *szModelID)
+{
+	if( szModelID == NULL )
+		return ;
+	memcpy(m_szSimuModelID , szModelID , sizeof(m_szSimuModelID));
+}
+
+void CSimuS_GCmd::GetSimuModelID(unsigned char *szModelID)
+{
+	if( szModelID == NULL )
+		return ;
+	memcpy(szModelID , m_szSimuModelID , sizeof(m_szSimuModelID));
+}
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::SerializeHeader
+ *  功能：  序列化命令帧头
+ *  入参:   无
+ *  出参:	unsigned char* szBuffer -- 序列化成功后的数据存放缓冲区
+ *  返回值:	序列化成功后的数据存放缓冲区大小
+ *****************************************************************/
+unsigned long CSimuS_GCmd::SerializeHeader(unsigned char* szBuffer)
+{
+	memcpy(szBuffer , m_szVersion , S_G_CMD_SIZE_VERSION);
+	memcpy(szBuffer + S_G_CMD_POS_FRAMELEN , (void*)&m_nFrameLen , S_G_CMD_SIZE_FRAMELEN);
+	memcpy(szBuffer + S_G_CMD_POS_COMMAND , (void*)&m_nCmd , S_G_CMD_SIZE_COMMAND);
+	memcpy(szBuffer + S_G_CMD_POS_FRAMEBODYLEN , (void*)&m_nFrameBodyLen , S_G_CMD_SIZE_FRAMEBODYLEN);
+	memcpy(szBuffer + S_G_CMD_POS_SIMUPROJECTID , m_szSimuProjectID , S_G_CMD_SIZE_SIMUPROJECTID);
+	memcpy(szBuffer + S_G_CMD_POS_SIMUMODELID , m_szSimuModelID , S_G_CMD_SIZE_SIMUMODELID);
+	memcpy(szBuffer + S_G_CMD_POS_RESERVED2 , m_szReserved2 , S_G_CMD_SIZE_RESERVED2);
+	memcpy(szBuffer + S_G_CMD_POS_RESERVED3 , m_szReserved3 , S_G_CMD_SIZE_RESERVED3);
+	memcpy(szBuffer + S_G_CMD_POS_RESERVED4 , m_szReserved4 , S_G_CMD_SIZE_RESERVED4);
+	return S_G_CMD_HEADER_SIZE;
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::Serialize
+ *  功能：  序列化命令
+ *  入参:   无
+ *  出参:	unsigned char* szBuffer -- 序列化成功后的数据存放缓冲区
+ *  返回值:	序列化成功后的数据存放缓冲区大小
+ *****************************************************************/
+unsigned long CSimuS_GCmd::Serialize(unsigned char* szBuffer)
+{
+	m_nFrameBodyLen = CalcFrameBodyLen();
+	m_nFrameLen = CalcFrameLen();
+
+	return SerializeHeader(szBuffer);
+}
+
+/*****************************************************************
+ *  函数名：CSimuS_GCmd::Unserialize
+ *  功能：  反序列化传入的数据
+ *  入参:   unsigned char* szBuffer -- 需要反序列化的数据缓冲区
+ *			unsigned long nBufferLen -- 需要反序列化的数据缓冲区大小
+ *  出参:	无
+ *  返回值:	TRUE -- 成功 , FALSE -- 失败
+ *****************************************************************/
+BOOL CSimuS_GCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( nBufferLen < S_G_CMD_HEADER_SIZE )
+	{
+		return FALSE;
+	}
+	memcpy(m_szVersion , szBuffer + S_G_CMD_POS_VERSION , S_G_CMD_SIZE_VERSION);
+	memcpy((void*)&m_nFrameLen , szBuffer + S_G_CMD_POS_FRAMELEN , S_G_CMD_SIZE_FRAMELEN);
+	memcpy((void*)&m_nCmd , szBuffer + S_G_CMD_POS_COMMAND , S_G_CMD_SIZE_COMMAND);
+	memcpy((void*)&m_nFrameBodyLen , szBuffer + S_G_CMD_POS_FRAMEBODYLEN , S_G_CMD_SIZE_FRAMEBODYLEN);
+	memcpy(m_szSimuProjectID , szBuffer + S_G_CMD_POS_SIMUPROJECTID , S_G_CMD_SIZE_SIMUPROJECTID);
+	memcpy(m_szSimuModelID , szBuffer + S_G_CMD_POS_SIMUMODELID , S_G_CMD_SIZE_SIMUMODELID);
+	memcpy(m_szReserved2 , szBuffer + S_G_CMD_POS_RESERVED2 , S_G_CMD_SIZE_RESERVED2);
+	memcpy(m_szReserved3 , szBuffer + S_G_CMD_POS_RESERVED3 , S_G_CMD_SIZE_RESERVED3);
+	memcpy(m_szReserved4 , szBuffer + S_G_CMD_POS_RESERVED4 , S_G_CMD_SIZE_RESERVED4);
+	return TRUE;
+}
+
+void CSimuS_GCmd::Print(char* szBuffer)
+{
+	char szTmp[256];
+	char szStr[128];
+
+	switch( m_nCmd )
+	{
+	case S_G_CMD_UNKNOWN	 :
+		sprintf(szTmp ,  "Cmd: L_S_CMD_UNKNOWN");break;
+	case S_G_CMD_LOADSIMUMODEL	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_LOADSIMUMODEL");break;
+	case S_G_CMD_LOADSIMUMODEL_RESP	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_LOADSIMUMODEL_RESP");break;
+	case S_G_CMD_EXECSIMUMODEL	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_EXECSIMUMODEL");break;
+	case S_G_CMD_EXECSIMUMODEL_RESP	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_EXECSIMUMODEL_RESP");break;
+	case S_G_CMD_PAUSESIMUMODEL	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_PAUSESIMUMODEL");break;
+	case S_G_CMD_PAUSESIMUMODEL_RESP	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_PAUSESIMUMODEL_RESP");break;
+	case S_G_CMD_RESETSIMUMODEL	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_RESETSIMUMODEL");break;
+	case S_G_CMD_RESETSIMUMODEL_RESP	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_RESETSIMUMODEL_RESP");break;
+	case S_G_CMD_SETMODELPARAM	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_SETMODELPARAM");break;
+	case S_G_CMD_SETMODELPARAM_RESP	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_SETMODELPARAM_RESP");break;
+	case S_G_CMD_TESTEVENT_REPORT	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_TESTEVENT_REPORT");break;
+	case S_G_CMD_EXCEPTEVENT_REPORT	 :
+		sprintf(szTmp ,  "Cmd: S_G_CMD_EXCEPTEVENT_REPORT");break;
+	default :
+		break;
+	}
+	strcat(szBuffer, szTmp);
+
+	sprintf(szTmp, ", FrameLen: %ld" , m_nFrameLen);
+	strcat(szBuffer, szTmp);
+
+	sprintf(szTmp, ", FrameBodyLen:%ld \n" , m_nFrameBodyLen);
+	strcat(szBuffer, szTmp);
+
+	memset(szStr, 0x0, sizeof(szStr));
+	memcpy(szStr, m_szSimuProjectID, S_G_CMD_SIZE_SIMUPROJECTID);
+	sprintf(szTmp, "ProjID=%s," , szStr);
+	strcat(szBuffer, szTmp);
+
+	memset(szStr, 0x0, sizeof(szStr));
+	memcpy(szStr, m_szSimuModelID, S_G_CMD_SIZE_SIMUMODELID);
+	sprintf(szTmp, "ModelID=%s \n" , szStr);
+	strcat(szBuffer, szTmp);
+
+	return ;
+}
+
+unsigned long CSimuS_GCmd::CalcFrameLen()
+{
+	return S_G_CMD_HEADER_SIZE + CalcFrameBodyLen();
+}
+
+
+/****************************************************************
+ * 类名 : 1.CSimuS_GLoadSimuModelCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 加载仿真模型请求命令
+ ****************************************************************/
+CSimuS_GLoadSimuModelCmd::CSimuS_GLoadSimuModelCmd()
+	: CSimuS_GCmd(S_G_CMD_LOADSIMUMODEL)
+{
+	memset(m_CommuParam.szDebugParam, 0x0, sizeof(m_CommuParam.szDebugParam));
+	memset(m_CommuParam.szDriverLibPath, 0x0, sizeof(m_CommuParam.szDriverLibPath));
+	memset(m_CommuParam.szModelConfPath, 0x0, sizeof(m_CommuParam.szModelConfPath));
+	memset(m_CommuParam.szMonitorIp, 0x0, sizeof(m_CommuParam.szMonitorIp));
+}
+
+CSimuS_GLoadSimuModelCmd::~CSimuS_GLoadSimuModelCmd()
+{
+	for(unsigned int i = 0; i < m_CommuParam.vecModelFilePath.size(); i++)
+		delete m_CommuParam.vecModelFilePath.at(i);
+	m_CommuParam.vecModelFilePath.clear();
+}
+
+unsigned long CSimuS_GLoadSimuModelCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	CommuModelProgFilePath_t *pModelPath = NULL;
+
+	memcpy(szBuffer + nLen, m_CommuParam.szMonitorIp, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_CommuParam.usPort, 2);
+	nLen += 2;
+	memcpy(szBuffer + nLen, &m_CommuParam.bDebugMode, 1);
+	nLen += 1;
+	memcpy(szBuffer + nLen, &m_CommuParam.usDebugParamLen, 2);
+	nLen += 2;
+	memcpy(szBuffer + nLen, m_CommuParam.szDebugParam, m_CommuParam.usDebugParamLen);
+	nLen += m_CommuParam.usDebugParamLen;
+	memcpy(szBuffer + nLen, &m_CommuParam.usModelConfPathLen, 2);
+	nLen += 2;
+	memcpy(szBuffer + nLen, m_CommuParam.szModelConfPath, m_CommuParam.usModelConfPathLen);
+	nLen += m_CommuParam.usModelConfPathLen;
+	memcpy(szBuffer + nLen, &m_CommuParam.usDriverLibPathLen, 2);
+	nLen += 2;
+	memcpy(szBuffer + nLen, m_CommuParam.szDriverLibPath, m_CommuParam.usDriverLibPathLen);
+	nLen += m_CommuParam.usDriverLibPathLen;
+	memcpy(szBuffer + nLen, &m_CommuParam.nModelCount, 4);
+	nLen += 4;
+	for(unsigned int i = 0; i < m_CommuParam.vecModelFilePath.size(); i++){
+		pModelPath = m_CommuParam.vecModelFilePath.at(i);
+		memcpy(szBuffer + nLen, &pModelPath->nModelId, 4);
+		nLen += 4;
+		memcpy(szBuffer + nLen, &pModelPath->nFilePathLen, 2);
+		nLen += 2;
+		memcpy(szBuffer + nLen, pModelPath->szFilePath, pModelPath->nFilePathLen);
+		nLen += pModelPath->nFilePathLen;
+	}
+	return nLen;
+}
+
+BOOL CSimuS_GLoadSimuModelCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	CommuModelProgFilePath_t *pModelPath = NULL;
+
+	int nBodyPos = S_G_CMD_HEADER_SIZE;
+	memcpy(m_CommuParam.szMonitorIp , szBuffer + nBodyPos , 4);
+	nBodyPos += 4;
+	memcpy(&m_CommuParam.usPort , szBuffer + nBodyPos , 2);
+	nBodyPos += 2;
+	memcpy(&m_CommuParam.bDebugMode, szBuffer + nBodyPos, 1);
+	nBodyPos += 1;
+	memcpy(&m_CommuParam.usDebugParamLen, szBuffer + nBodyPos, 2);
+	nBodyPos += 2;
+	memcpy(m_CommuParam.szDebugParam, szBuffer + nBodyPos, m_CommuParam.usDebugParamLen);
+	nBodyPos += m_CommuParam.usDebugParamLen;
+	memcpy(&m_CommuParam.usModelConfPathLen, szBuffer + nBodyPos, 2);
+	nBodyPos += 2;
+	memcpy(m_CommuParam.szModelConfPath, szBuffer + nBodyPos, m_CommuParam.usModelConfPathLen);
+	nBodyPos += m_CommuParam.usModelConfPathLen;
+	memcpy(&m_CommuParam.usDriverLibPathLen, szBuffer + nBodyPos, 2);
+	nBodyPos += 2;
+	memcpy(m_CommuParam.szDriverLibPath, szBuffer + nBodyPos, m_CommuParam.usDriverLibPathLen);
+	nBodyPos += m_CommuParam.usDriverLibPathLen;
+	memcpy(&m_CommuParam.nModelCount, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+
+	for(unsigned int i = 0; i < m_CommuParam.nModelCount; i++){
+		pModelPath = new CommuModelProgFilePath_t;
+		memset(pModelPath->szFilePath, 0x0, sizeof(pModelPath->szFilePath));
+
+		memcpy(&pModelPath->nModelId, szBuffer + nBodyPos, 4);
+		nBodyPos += 4;
+		memcpy(&pModelPath->nFilePathLen, szBuffer + nBodyPos, 2);
+		nBodyPos += 2;
+		memcpy(&pModelPath->szFilePath, szBuffer + nBodyPos, pModelPath->nFilePathLen);
+		nBodyPos += pModelPath->nFilePathLen;
+		m_CommuParam.vecModelFilePath.push_back(pModelPath);
+	}
+	return TRUE;
+}
+
+void CSimuS_GLoadSimuModelCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+	CommuModelProgFilePath_t *pModelPath = NULL;
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp,   "Monitor:%d.%d.%d.%d, port:%d \n", (unsigned char )m_CommuParam.szMonitorIp[0],
+		(unsigned char )m_CommuParam.szMonitorIp[1],(unsigned char )m_CommuParam.szMonitorIp[2],
+		(unsigned char )m_CommuParam.szMonitorIp[3],m_CommuParam.usPort);
+	strcat(szBuffer, szTmp);
+
+	sprintf(szTmp,   "Debug: model->%d, nLen:%d, param:%s \n", m_CommuParam.bDebugMode,
+		m_CommuParam.usDebugParamLen, m_CommuParam.szDebugParam);
+	strcat(szBuffer, szTmp);
+
+	sprintf(szTmp,   "Conf:%s, nLen:%d, Dirver:%s, nLen:%d \n",m_CommuParam.szModelConfPath,
+		m_CommuParam.usModelConfPathLen, m_CommuParam.szDriverLibPath, m_CommuParam.usDriverLibPathLen);
+	strcat(szBuffer, szTmp);
+
+	sprintf(szTmp,   "ModelCount:%ld \n", m_CommuParam.nModelCount);
+	strcat(szBuffer, szTmp);
+
+	for(unsigned int i = 0; i < m_CommuParam.vecModelFilePath.size(); i++){
+		pModelPath = m_CommuParam.vecModelFilePath.at(i);
+
+		sprintf(szTmp,   "modelId:%ld, nLen:%lu, path:%s \n", pModelPath->nModelId,
+			pModelPath->nFilePathLen, pModelPath->szFilePath);
+		strcat(szBuffer, szTmp);
+	}
+}
+
+unsigned long CSimuS_GLoadSimuModelCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+	CommuModelProgFilePath_t *pModelPath = NULL;
+
+	nLen += 4 + 2;
+	nLen += 1 + 2 + m_CommuParam.usDebugParamLen;
+	nLen += 2 + m_CommuParam.usModelConfPathLen;
+	nLen += 2 + m_CommuParam.usDriverLibPathLen;
+	nLen += 4;
+	for(unsigned int i = 0; i < m_CommuParam.vecModelFilePath.size(); i++){
+		pModelPath = m_CommuParam.vecModelFilePath.at(i);
+		nLen += 4 + 2 + pModelPath->nFilePathLen;
+	}
+	return nLen;
+}
+
+void CSimuS_GLoadSimuModelCmd::SetParam(const CommuS_GLoadSimuModelParam_t *pParam)
+{
+	CommuModelProgFilePath_t *pModelPath = NULL;
+	CommuModelProgFilePath_t *pNewModelPath = NULL;
+
+	memcpy(m_CommuParam.szMonitorIp, pParam->szMonitorIp, 4);
+	m_CommuParam.usPort = pParam->usPort;
+	m_CommuParam.bDebugMode = pParam->bDebugMode;
+	m_CommuParam.usDebugParamLen = pParam->usDebugParamLen;
+	memcpy(m_CommuParam.szDebugParam, pParam->szDebugParam, pParam->usDebugParamLen);
+	m_CommuParam.usModelConfPathLen = pParam->usModelConfPathLen;
+	memcpy(m_CommuParam.szModelConfPath, pParam->szModelConfPath, pParam->usModelConfPathLen);
+	m_CommuParam.usDriverLibPathLen = pParam->usDriverLibPathLen;
+	memcpy(m_CommuParam.szDriverLibPath, pParam->szDriverLibPath, pParam->usDriverLibPathLen);
+	m_CommuParam.nModelCount = pParam->vecModelFilePath.size();
+	for(unsigned int i = 0; i < pParam->vecModelFilePath.size(); i++){
+		pNewModelPath = new CommuModelProgFilePath_t;
+		memset(pNewModelPath->szFilePath, 0x0, sizeof(pNewModelPath->szFilePath));
+
+		pModelPath = pParam->vecModelFilePath.at(i);
+		pNewModelPath->nModelId = pModelPath->nModelId;
+		pNewModelPath->nFilePathLen = pModelPath->nFilePathLen;
+		memcpy(pNewModelPath->szFilePath, pModelPath->szFilePath, pModelPath->nFilePathLen);
+		m_CommuParam.vecModelFilePath.push_back(pNewModelPath);
+	}
+}
+
+const CommuS_GLoadSimuModelParam_t *CSimuS_GLoadSimuModelCmd::GetParam()
+{
+	return &m_CommuParam;
+}
+
+/****************************************************************
+ * 类名 : 2.CSimuS_GLoadSimuModelRespCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 加载仿真模型响应命令
+ ****************************************************************/
+CSimuS_GLoadSimuModelRespCmd::CSimuS_GLoadSimuModelRespCmd()
+	: CSimuS_GCmd(S_G_CMD_LOADSIMUMODEL_RESP)
+{
+	m_ulResult = 0;
+	m_ulErrInfoLen = 0;
+	memset(m_szErrInfo, 0x0, sizeof(m_szErrInfo));
+}
+
+CSimuS_GLoadSimuModelRespCmd::~CSimuS_GLoadSimuModelRespCmd()
+{
+
+}
+
+unsigned long CSimuS_GLoadSimuModelRespCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	memcpy(szBuffer +  nLen, &m_ulResult, sizeof(unsigned long));
+	nLen += sizeof(unsigned long);
+	memcpy(szBuffer + nLen, &m_ulErrInfoLen, sizeof(unsigned long));
+	nLen += 4;
+	memcpy(szBuffer + nLen, m_szErrInfo, m_ulErrInfoLen);
+	nLen += m_ulErrInfoLen;
+
+	return nLen;
+}
+
+BOOL CSimuS_GLoadSimuModelRespCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	unsigned nPos = S_G_CMD_HEADER_SIZE;
+	memcpy(&m_ulResult , szBuffer + nPos , sizeof(unsigned long));
+	nPos += 4;
+	memcpy(&m_ulErrInfoLen, szBuffer + nPos, 4);
+	nPos += 4;
+	memcpy(m_szErrInfo, szBuffer + nPos, m_ulErrInfoLen);
+	nPos += m_ulErrInfoLen;
+
+	return TRUE;
+}
+
+void CSimuS_GLoadSimuModelRespCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp ,"%d,%d,info:%s\n" , m_ulResult, m_ulErrInfoLen, m_szErrInfo);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GLoadSimuModelRespCmd::CalcFrameBodyLen()
+{
+	return 4 + 4 + m_ulErrInfoLen;
+}
+
+void CSimuS_GLoadSimuModelRespCmd::SetResult(unsigned long ret)
+{
+	m_ulResult = ret;
+}
+
+unsigned long CSimuS_GLoadSimuModelRespCmd::GetResult()
+{
+	return m_ulResult;
+}
+
+void CSimuS_GLoadSimuModelRespCmd::SetErrInfo(unsigned char *szErrInfo, unsigned long nErrLen)
+{
+	memcpy(m_szErrInfo, szErrInfo, nErrLen);
+	m_ulErrInfoLen = nErrLen;
+}
+
+int  CSimuS_GLoadSimuModelRespCmd::GetErrInfo(unsigned char *szBuffer)
+{
+	strcpy((char *)szBuffer, (char *)m_szErrInfo);
+	return strlen((char *)m_szErrInfo);
+}
+
+/****************************************************************
+ * 类名 : 3.CSimuS_GExecSimuModelCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 执行仿真模型
+ ****************************************************************/
+CSimuS_GExecSimuModelCmd::CSimuS_GExecSimuModelCmd()
+	: CSimuS_GCmd(S_G_CMD_EXECSIMUMODEL)
+{
+	m_nExecMode = 0;
+}
+
+CSimuS_GExecSimuModelCmd::~CSimuS_GExecSimuModelCmd()
+{
+
+}
+
+unsigned long CSimuS_GExecSimuModelCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	memcpy(szBuffer + nLen, &m_nExecMode, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_nTestTask, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_nTestCase, 4);
+	nLen += 4;
+
+	return nLen;
+}
+
+BOOL CSimuS_GExecSimuModelCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	int nBodyPos = S_G_CMD_HEADER_SIZE;
+	memcpy(&m_nExecMode , szBuffer + nBodyPos , 4);
+	nBodyPos += 4;
+	memcpy(&m_nTestTask, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(&m_nTestCase, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	
+	return TRUE;
+}
+
+void CSimuS_GExecSimuModelCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp,   "nExecMode:%ld , TestTask:%ld, TestCase:%ld\n", m_nExecMode, m_nTestTask, m_nTestCase);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GExecSimuModelCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 4 * 3;
+
+	return nLen;
+}
+
+void CSimuS_GExecSimuModelCmd::SetData(int nExecMode, int TestTask, int TestCase)
+{
+	m_nExecMode = nExecMode;
+	m_nTestTask = TestTask;
+	m_nTestCase = TestCase;
+}
+
+unsigned long CSimuS_GExecSimuModelCmd::GetExecMode()
+{
+	return m_nExecMode;
+}
+
+unsigned long CSimuS_GExecSimuModelCmd::GetTestTask()
+{
+	return m_nTestTask;
+}
+
+unsigned long CSimuS_GExecSimuModelCmd::GetTestCase()
+{
+	return m_nTestCase;
+}
+
+/****************************************************************
+ * 类名 : 4.CSimuS_GExecSimuModelRespCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 执行仿真模型响应命令
+ ****************************************************************/
+CSimuS_GExecSimuModelRespCmd::CSimuS_GExecSimuModelRespCmd()
+	: CSimuS_GCmd(S_G_CMD_EXECSIMUMODEL_RESP)
+{
+	m_ulResult = 0;
+}
+
+CSimuS_GExecSimuModelRespCmd::~CSimuS_GExecSimuModelRespCmd()
+{
+
+}
+
+unsigned long CSimuS_GExecSimuModelRespCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	memcpy(szBuffer + S_G_CMD_HEADER_SIZE , &m_ulResult, sizeof(unsigned long));
+	nLen += sizeof(unsigned long);
+	return nLen;
+}
+
+BOOL CSimuS_GExecSimuModelRespCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+	memcpy(&m_ulResult , szBuffer + S_G_CMD_HEADER_SIZE , sizeof(unsigned long));
+	return TRUE;
+}
+
+void CSimuS_GExecSimuModelRespCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp, "%ld\n" , m_ulResult);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GExecSimuModelRespCmd::CalcFrameBodyLen()
+{
+	return 4;
+}
+
+void CSimuS_GExecSimuModelRespCmd::SetResult(unsigned long ret)
+{
+	m_ulResult = ret;
+}
+
+unsigned long CSimuS_GExecSimuModelRespCmd::GetResult()
+{
+	return m_ulResult;
+}
+
+/****************************************************************
+ * 类名 : 5.CSimuS_GPauseSimuModelCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 暂停仿真模型
+ ****************************************************************/
+CSimuS_GPauseSimuModelCmd::CSimuS_GPauseSimuModelCmd()
+	: CSimuS_GCmd(S_G_CMD_PAUSESIMUMODEL)
+{
+}
+
+CSimuS_GPauseSimuModelCmd::~CSimuS_GPauseSimuModelCmd()
+{
+
+}
+
+unsigned long CSimuS_GPauseSimuModelCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	return nLen;
+}
+
+BOOL CSimuS_GPauseSimuModelCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	return TRUE;
+}
+
+void CSimuS_GPauseSimuModelCmd::Print(char* szBuffer)
+{
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+}
+
+unsigned long CSimuS_GPauseSimuModelCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+
+	return nLen;
+}
+
+/****************************************************************
+ * 类名 : 6.CSimuS_GPauseSimuModelRespCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 暂停仿真模型响应命令
+ ****************************************************************/
+CSimuS_GPauseSimuModelRespCmd::CSimuS_GPauseSimuModelRespCmd()
+	: CSimuS_GCmd(S_G_CMD_PAUSESIMUMODEL_RESP)
+{
+	m_ulResult = 0;
+}
+
+CSimuS_GPauseSimuModelRespCmd::~CSimuS_GPauseSimuModelRespCmd()
+{
+
+}
+
+unsigned long CSimuS_GPauseSimuModelRespCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	memcpy(szBuffer + S_G_CMD_HEADER_SIZE , &m_ulResult, sizeof(unsigned long));
+	nLen += sizeof(unsigned long);
+	return nLen;
+}
+
+BOOL CSimuS_GPauseSimuModelRespCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+	memcpy(&m_ulResult , szBuffer + S_G_CMD_HEADER_SIZE , sizeof(unsigned long));
+	return TRUE;
+}
+
+void CSimuS_GPauseSimuModelRespCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp, "%ld\n" , m_ulResult);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GPauseSimuModelRespCmd::CalcFrameBodyLen()
+{
+	return 4;
+}
+
+void CSimuS_GPauseSimuModelRespCmd::SetResult(unsigned long ret)
+{
+	m_ulResult = ret;
+}
+
+unsigned long CSimuS_GPauseSimuModelRespCmd::GetResult()
+{
+	return m_ulResult;
+}
+
+/****************************************************************
+ * 类名 : 7.CSimuS_GResetSimuModelCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 重置仿真模型
+ ****************************************************************/
+CSimuS_GResetSimuModelCmd::CSimuS_GResetSimuModelCmd()
+	: CSimuS_GCmd(S_G_CMD_RESETSIMUMODEL)
+{
+}
+
+CSimuS_GResetSimuModelCmd::~CSimuS_GResetSimuModelCmd()
+{
+
+}
+
+unsigned long CSimuS_GResetSimuModelCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	return nLen;
+}
+
+BOOL CSimuS_GResetSimuModelCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	return TRUE;
+}
+
+void CSimuS_GResetSimuModelCmd::Print(char* szBuffer)
+{
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+}
+
+unsigned long CSimuS_GResetSimuModelCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+
+	return nLen;
+}
+/****************************************************************
+ * 类名 : 8.CSimuS_GResetSimuModelRespCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 重置仿真模型响应命令
+ ****************************************************************/
+CSimuS_GResetSimuModelRespCmd::CSimuS_GResetSimuModelRespCmd()
+	: CSimuS_GCmd(S_G_CMD_RESETSIMUMODEL_RESP)
+{
+	m_ulResult = 0;
+}
+
+CSimuS_GResetSimuModelRespCmd::~CSimuS_GResetSimuModelRespCmd()
+{
+
+}
+
+unsigned long CSimuS_GResetSimuModelRespCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	memcpy(szBuffer + S_G_CMD_HEADER_SIZE , &m_ulResult, sizeof(unsigned long));
+	nLen += sizeof(unsigned long);
+	return nLen;
+}
+
+BOOL CSimuS_GResetSimuModelRespCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+	memcpy(&m_ulResult , szBuffer + S_G_CMD_HEADER_SIZE , sizeof(unsigned long));
+	return TRUE;
+}
+
+void CSimuS_GResetSimuModelRespCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp, "%ld\n" , m_ulResult);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GResetSimuModelRespCmd::CalcFrameBodyLen()
+{
+	return 4;
+}
+
+void CSimuS_GResetSimuModelRespCmd::SetResult(unsigned long ret)
+{
+	m_ulResult = ret;
+}
+
+unsigned long CSimuS_GResetSimuModelRespCmd::GetResult()
+{
+	return m_ulResult;
+}
+
+/****************************************************************
+ * 类名 : 9.CSimuS_GSetSimuModelParamCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 设置仿真模型参数
+ ****************************************************************/
+CSimuS_GSetSimuModelParamCmd::CSimuS_GSetSimuModelParamCmd()
+	: CSimuS_GCmd(S_G_CMD_SETMODELPARAM)
+{
+	m_nModelParamCount = 0;
+}
+
+CSimuS_GSetSimuModelParamCmd::~CSimuS_GSetSimuModelParamCmd()
+{
+	for(unsigned int i = 0; i < m_vecModelParam.size(); i++)
+		delete m_vecModelParam.at(i);
+	m_vecModelParam.clear();
+}
+
+unsigned long CSimuS_GSetSimuModelParamCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	CommuSetModelParam_t *pParam = NULL;
+
+	memcpy(szBuffer + nLen, &m_nModelParamCount, 4);
+	nLen += 4;
+	
+	for(unsigned int i = 0; i < m_vecModelParam.size(); i++){
+		pParam = m_vecModelParam.at(i);
+		
+		memcpy(szBuffer + nLen, &pParam->nModelID, 4);
+		nLen += 4;
+		memcpy(szBuffer + nLen, pParam->szParamName, COMMU_MODEL_PARAM_NAME_LEN);
+		nLen += COMMU_MODEL_PARAM_NAME_LEN;
+		memcpy(szBuffer + nLen, &pParam->nParamValueLen, 4);
+		nLen += 4;
+		memcpy(szBuffer + nLen, pParam->szParamValue, pParam->nParamValueLen);
+		nLen += pParam->nParamValueLen;
+	}
+	return nLen;
+}
+
+BOOL CSimuS_GSetSimuModelParamCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	CommuSetModelParam_t *pParam = NULL;
+
+	int nBodyPos = S_G_CMD_HEADER_SIZE;
+	memcpy(&m_nModelParamCount , szBuffer + nBodyPos , 4);
+	nBodyPos += 4;
+
+	for(unsigned int i = 0; i < m_nModelParamCount; i++){
+		pParam = new CommuSetModelParam_t;
+		memset(pParam->szParamName, 0x0, sizeof(pParam->szParamName));
+		memset(pParam->szParamValue, 0x0, sizeof(pParam->szParamValue));
+
+		memcpy(&pParam->nModelID, szBuffer + nBodyPos, 4);
+		nBodyPos += 4;
+		memcpy(pParam->szParamName, szBuffer + nBodyPos, COMMU_MODEL_PARAM_NAME_LEN);
+		nBodyPos += COMMU_MODEL_PARAM_NAME_LEN;
+		memcpy(&pParam->nParamValueLen, szBuffer + nBodyPos, 4);
+		nBodyPos += 4;
+		memcpy(pParam->szParamValue, szBuffer + nBodyPos, pParam->nParamValueLen);
+		nBodyPos += pParam->nParamValueLen;
+
+		m_vecModelParam.push_back(pParam);
+	}
+	return TRUE;
+}
+
+void CSimuS_GSetSimuModelParamCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+	CommuSetModelParam_t *pParam = NULL;
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp,   "ModelCount:%ld \n",m_nModelParamCount);
+	strcat(szBuffer, szTmp);
+
+	for(unsigned int i = 0; i < m_vecModelParam.size(); i++){
+		pParam = m_vecModelParam.at(i);
+
+		sprintf(szTmp,   "modelId:%ld, paramName:%s,nValueLen:%ld, paramValue:%s \n",pParam->nModelID,
+			pParam->szParamName, pParam->nParamValueLen, pParam->szParamValue);
+		strcat(szBuffer, szTmp);
+	}
+}
+
+unsigned long CSimuS_GSetSimuModelParamCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+	CommuSetModelParam_t *pParam = NULL;
+
+	nLen += 4;
+	for(unsigned int i = 0; i < m_vecModelParam.size(); i++){
+		pParam = m_vecModelParam.at(i);
+		nLen += 4 + COMMU_MODEL_PARAM_NAME_LEN + 4 + pParam->nParamValueLen;
+	}
+	return nLen;
+}
+
+void CSimuS_GSetSimuModelParamCmd::SetModelParam(const vector<CommuSetModelParam_t *> &vecModelParam)
+{
+	CommuSetModelParam_t *pParam = NULL;
+	CommuSetModelParam_t *pNewParam = NULL;
+
+	m_nModelParamCount = vecModelParam.size();
+	for( unsigned int i = 0; i < m_nModelParamCount; i++){
+		pParam = vecModelParam.at(i);
+		pNewParam = new CommuSetModelParam_t;
+		memset(pNewParam->szParamName, 0x0, sizeof(pNewParam->szParamName));
+		memset(pNewParam->szParamValue, 0x0, sizeof(pNewParam->szParamValue));
+		pNewParam->nModelID = pParam->nModelID;
+		pNewParam->nParamValueLen = pParam->nParamValueLen;
+		memcpy(pNewParam->szParamName, pParam->szParamName, strlen((char *)pParam->szParamName));
+		memcpy(pNewParam->szParamValue, pParam->szParamValue, pParam->nParamValueLen);
+		m_vecModelParam.push_back(pNewParam);
+	}
+}
+
+const vector<CommuSetModelParam_t *> *CSimuS_GSetSimuModelParamCmd::GetModelParam()
+{
+	return &m_vecModelParam;
+}
+
+/****************************************************************
+ * 类名 : 10.CSimuS_GSetSimuModelParamRespCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 设置仿真模型参数响应命令
+ ****************************************************************/
+CSimuS_GSetSimuModelParamRespCmd::CSimuS_GSetSimuModelParamRespCmd()
+	: CSimuS_GCmd(S_G_CMD_SETMODELPARAM_RESP)
+{
+	m_ulResult = 0;
+}
+
+CSimuS_GSetSimuModelParamRespCmd::~CSimuS_GSetSimuModelParamRespCmd()
+{
+
+}
+
+unsigned long CSimuS_GSetSimuModelParamRespCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+	memcpy(szBuffer + S_G_CMD_HEADER_SIZE , &m_ulResult, sizeof(unsigned long));
+	nLen += sizeof(unsigned long);
+	return nLen;
+}
+
+BOOL CSimuS_GSetSimuModelParamRespCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+	memcpy(&m_ulResult , szBuffer + S_G_CMD_HEADER_SIZE , sizeof(unsigned long));
+	return TRUE;
+}
+
+void CSimuS_GSetSimuModelParamRespCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp, "%d\n" , m_ulResult);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GSetSimuModelParamRespCmd::CalcFrameBodyLen()
+{
+	return 4;
+}
+
+void CSimuS_GSetSimuModelParamRespCmd::SetResult(unsigned long ret)
+{
+	m_ulResult = ret;
+}
+
+unsigned long CSimuS_GSetSimuModelParamRespCmd::GetResult()
+{
+	return m_ulResult;
+}
+
+/****************************************************************
+ * 类名 : 11.CSimuS_GTestEventReportCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 测试事件上报
+ ****************************************************************/
+CSimuS_GTestEventReportCmd::CSimuS_GTestEventReportCmd()
+	: CSimuS_GCmd(S_G_CMD_TESTEVENT_REPORT)
+{
+	memset(m_Report.szEventValue, 0x0 , sizeof(m_Report.szEventValue));
+}
+
+CSimuS_GTestEventReportCmd::~CSimuS_GTestEventReportCmd()
+{
+	
+}
+
+unsigned long CSimuS_GTestEventReportCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	memcpy(szBuffer + nLen, &m_Report.nReportType, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_Report.nTestTaskId, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_Report.nTestCaseId, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, &m_Report.nEventValueLen, 4);
+	nLen += 4;
+	memcpy(szBuffer + nLen, m_Report.szEventValue, m_Report.nEventValueLen);
+	nLen += m_Report.nEventValueLen;
+
+	return nLen;
+}
+
+BOOL CSimuS_GTestEventReportCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	int nBodyPos = S_G_CMD_HEADER_SIZE;
+	memcpy(&m_Report.nReportType, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(&m_Report.nTestTaskId, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(&m_Report.nTestCaseId, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(&m_Report.nEventValueLen, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(m_Report.szEventValue, szBuffer + nBodyPos, m_Report.nEventValueLen);
+	nBodyPos += m_Report.nEventValueLen;
+	
+	return TRUE;
+}
+
+void CSimuS_GTestEventReportCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp, "Type:%d , TaskId:%d, caseId:%d nLen:%d, value:%s\n",
+		m_Report.nReportType,m_Report.nTestTaskId, m_Report.nTestCaseId,
+		m_Report.nEventValueLen, m_Report.szEventValue);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GTestEventReportCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+	
+	nLen += 4 + 4 + 4;
+	nLen += 4 + m_Report.nEventValueLen;
+
+	return nLen;
+}
+
+void CSimuS_GTestEventReportCmd::SetReport(const CommuTestEventReport_t *pReport)
+{
+	m_Report.nReportType = pReport->nReportType;
+	m_Report.nTestTaskId = pReport->nTestTaskId;
+	m_Report.nTestCaseId = pReport->nTestCaseId;
+	m_Report.nEventValueLen = pReport->nEventValueLen;
+	memcpy(m_Report.szEventValue, pReport->szEventValue, pReport->nEventValueLen);
+}
+
+const CommuTestEventReport_t *CSimuS_GTestEventReportCmd::GetReport()
+{
+	return &m_Report;
+}
+
+/****************************************************************
+ * 类名 : 12.CSimuS_GExceptEventReportCmd
+ * 父类 : CSimuS_GCmd
+ * 说明 : 异常事件上报
+ ****************************************************************/
+CSimuS_GExceptEventReportCmd::CSimuS_GExceptEventReportCmd()
+	: CSimuS_GCmd(S_G_CMD_EXCEPTEVENT_REPORT)
+{
+	memset(m_Report.szReportValue, 0x0 , sizeof(m_Report.szReportValue));
+}
+
+CSimuS_GExceptEventReportCmd::~CSimuS_GExceptEventReportCmd()
+{
+
+}
+
+unsigned long CSimuS_GExceptEventReportCmd::Serialize(unsigned char* szBuffer)
+{
+	unsigned long nLen = CSimuS_GCmd::Serialize(szBuffer);
+
+	memcpy(szBuffer + nLen, &m_Report.nReportType, 4);
+	nLen += 4;
+
+	return nLen;
+}
+
+BOOL CSimuS_GExceptEventReportCmd::Unserialize(unsigned char* szBuffer , unsigned long nBufferLen)
+{
+	if( !CSimuS_GCmd::Unserialize(szBuffer , nBufferLen) )
+		return FALSE;
+	if( nBufferLen < m_nFrameLen )
+		return FALSE;
+
+	int nBodyPos = S_G_CMD_HEADER_SIZE;
+	memcpy(&m_Report.nReportType, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(&m_Report.nReportLen, szBuffer + nBodyPos, 4);
+	nBodyPos += 4;
+	memcpy(m_Report.szReportValue, szBuffer + nBodyPos, m_Report.nReportLen);
+	nBodyPos += m_Report.nReportLen;
+
+	return TRUE;
+}
+
+void CSimuS_GExceptEventReportCmd::Print(char* szBuffer)
+{
+	char szTmp[1024];
+
+	szBuffer[0] = '\0';
+	CSimuS_GCmd::Print(szBuffer);
+
+	sprintf(szTmp,   "Type:%d , nLen:%d, value:%s\n",
+		m_Report.nReportType, m_Report.nReportLen, m_Report.szReportValue);
+	strcat(szBuffer, szTmp);
+}
+
+unsigned long CSimuS_GExceptEventReportCmd::CalcFrameBodyLen()
+{
+	unsigned long nLen = 0;
+
+	nLen += 4 + 4 + m_Report.nReportLen;
+
+	return nLen;
+}
+
+void CSimuS_GExceptEventReportCmd::SetReport(const CommuExceptReport_t *pReport)
+{
+	m_Report.nReportType = pReport->nReportType;
+	m_Report.nReportLen = pReport->nReportLen;
+	memcpy(m_Report.szReportValue, pReport->szReportValue, pReport->nReportLen);
+}
+
+const CommuExceptReport_t *CSimuS_GExceptEventReportCmd::GetReport()
+{
+	return &m_Report;
+}

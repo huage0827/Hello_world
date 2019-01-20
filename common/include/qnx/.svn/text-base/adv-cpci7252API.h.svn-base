@@ -1,0 +1,51 @@
+#pragma once
+
+#include "adv-cpci7252err.h"
+#include "adv-cpci7252.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef unsigned char       U8;
+typedef short               I16;
+typedef unsigned short      U16;
+typedef long                I32;
+typedef unsigned long       U32;
+typedef float               F32;
+typedef double              F64;
+typedef char                Boolean;
+
+enum {
+    PCI_CARD1,
+    PCI_CARD2,
+    PCI_CARD3,
+    PCI_CARD4,
+    PCI_CARD5,
+    PCI_CARD6,
+    PCI_CARD7,
+    PCI_CARD8,
+    PCI_CARD9,
+    PCI_CARD10,
+    PCI_CARD11,
+    PCI_CARD12,
+    MAX_PCI_CARDS
+};
+
+typedef struct {
+    U16 baseAddr[MAX_PCI_CARDS];
+    U16 irqNo[MAX_PCI_CARDS];
+} PCI_INFO;
+
+extern U16  adlink_7252_Initial(U16 *existCards, PCI_INFO *pciInfo);
+extern U16  adlink_7252_DO(U16 cardNo, U8 doData);
+extern U16  adlink_7252_ReadRelay(U16 cardNo ,U8 *diData);
+extern U16  adlink_7252_DI(U16 cardNo, U16 *diData);
+extern U16	adlink_7252_Get_Interrupt_Status_Address(U16 cardNo, U32 *addr);
+extern U16	adlink_7252_Enable_Clock(U16 cardNo , U8 chanNo , Boolean bEnable , U32 callPeriod);
+extern U16	adlink_7252_Clock_Reached(U16 cardNo , Boolean& bClockReached);
+extern void adlink_7252_Uninitial();
+
+#ifdef __cplusplus
+}
+#endif

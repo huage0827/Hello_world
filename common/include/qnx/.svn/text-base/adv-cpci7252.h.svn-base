@@ -1,0 +1,22 @@
+/*
+ * adv-cpci7252.h
+ *
+ *  Created on: 2012-6-7
+ *      Author: cqb
+ */
+
+#ifndef ADVCPCI7252_H_
+#define ADVCPCI7252_H_
+
+#include "devctl.h"
+
+#define MAX_CARD_NUM	12
+
+#define CPCI7252_DCMD_GET_PCIINFO		__DIOTF(_DCMD_MISC , 1 , 1)
+#define CPCI7252_DCMD_READ_DI			__DIOTF(_DCMD_MISC , 2 , 1)
+#define CPCI7252_DCMD_WRITE_DO			__DIOTF(_DCMD_MISC , 3 , 1)
+#define CPCI7252_DCMD_READ_RELAY		__DIOTF(_DCMD_MISC , 4 , 1)
+#define CPCI7252_DCMD_ENABLE_CLOCK		__DIOTF(_DCMD_MISC , 5 , 1)
+#define CPCI7252_DCMD_GET_INTERRUPT_STATUS_ADDRESS	__DIOTF(_DCMD_MISC , 6 , 1)
+
+#endif /* ADVCPCI7252_H_ */

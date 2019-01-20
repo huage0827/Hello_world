@@ -1,0 +1,119 @@
+/*****************************************************************
+ * 文件名: SimuConfigParser.h
+ * 功能: 解析模型配置文件头文件
+ *****************************************************************/
+#pragma  once
+
+#include <vector>	
+#include <string>
+#include <map>
+#include <iostream>
+#include "SimuConfigDef.h"
+#include "tinyxml.h"
+#include "tinystr.h"
+
+using namespace std;
+
+/****************************************************************
+ * 类名 : CSimuConfigParser
+ * 父类 : 无
+ * 说明 : 配置文件解析类
+ ****************************************************************/
+class CSimuConfigParser{
+
+public:
+	CSimuConfigParser();
+	~CSimuConfigParser();
+
+	/* 加载配置文件 */
+	bool  LoadCfg(const char *szCfgFile); 
+	/* 释放资源 */
+	void  UnLoad(); 
+	/* 配置合法性检查*/
+	bool  CheckCfg(); 	
+	/* 获取错误信息*/
+	const char *GetLastErrMsg(); 
+	/* 获取配置文件*/
+	const char *GetCfgFile();
+
+	/* 数据返回 */
+	const ConfigProjectInfo_t* GetProjInfo();
+	const ConfigSimuMode_t* GetSimuMode();
+	const vector<ConfigSimuModelInfo_t *> *GetModelInfo();
+	const vector<ConfigExUserFile_t *> *GetExUserFile();
+	const vector<ConfigInputSig_t *> *GetInputSig();
+	const vector<ConfigRecordGroup_t *> *GetRecordGroup();
+	const vector<ConfigOutputSig_t *> *GetOutputSig();
+	const vector<ConfigInterParam_t *> *GetParams();
+	const vector<ConfigTestCase_t *> *GetTestCase();
+	const vector<ConfigTestTask_t *> *GetTestTask();
+
+	/* 打印输出 */
+	void PrintAll();
+	void PrintProject();
+	void PrintSimuMode();
+	void PrintModeInfo();
+	void PrintExUserFile();
+	void PrintInputSig();
+	void PrintRecordGroup();
+	void PrintOutputSig();
+	void PrintParams();
+	void PrintTestCase();
+	void PrintTestTask();
+
+	/*根据类型返回其所占字节*/
+	static int GetDataTypeByteLen(int type);
+
+	static int CopyProjectInfo(const ConfigProjectInfo_t *pSrcProj,ConfigProjectInfo_t *pDesProj);
+	static int CopyModelInfo(const ConfigSimuModelInfo_t *pSrcModel, ConfigSimuModelInfo_t *pDesModel);
+	static int CopyInputSig(const ConfigInputSig_t *pSrcSig, ConfigInputSig_t *pDesSig);
+	static int CopyOutputSig(const ConfigOutputSig_t *pSrcSig, ConfigOutputSig_t* pDesSig);
+	static int CopyInterParam(const ConfigInterParam_t *pSrcParam, ConfigInterParam_t *pDesParam);
+
+private:
+	/*解析仿真模式节点*/
+	bool ParseSimuModelNode(TiXmlElement *pRootXmlEle);
+	/*解析数据字典节点*/
+	bool ParseDataDictNode(TiXmlElement *pRootXmlEle);
+	/*解析输入信号节点*/
+	bool ParseDataDict_InputSigNode(TiXmlElement *pRootXmlEle, ConfigInputSig_t *pInput);
+	/*解析数据存储组节点*/
+	bool ParseOutputRecordGroupNode(TiXmlElement *pRootXmlEle, ConfigRecordGroup_t *pGroup);
+	/*解析输出信号节点*/
+	bool ParseDataDict_OutputSigNode(TiXmlElement *pRootXmlEle, ConfigOutputSig_t *pOutput);
+	/*解析内部参数节点*/
+	bool ParseDataDict_ParamNode(TiXmlElement *pRootXmlEle, ConfigInterParam_t *pParam);
+	/*解析测试用例节点*/
+	bool ParseTestCaseNode(TiXmlElement *pRootXmlEle);
+	/*解析测试任务节点*/
+	bool ParseTestTaskNode(TiXmlElement *pRootXmlEle);
+
+	/* 合法性检查 */
+	bool CheckProject();
+	bool CheckSimuModel();
+	bool CheckModelInfo();
+	bool CheckExUserFile();
+	bool CheckInputSig();
+	bool CheckRecordGroup();
+	bool CheckOutputSig();
+	bool CheckParams();
+	bool CheckTestCase();
+	bool CheckTestTask();
+
+protected:
+	bool    m_bLoadCfg; /*是否已经加载配置*/
+	string  m_szErrorMsg; /*错误信息*/
+	string  m_szCfgFile;
+
+	ConfigProjectInfo_t m_ProjInfo;/*工程信息*/
+	ConfigSimuMode_t m_SimuMode;/*仿真模式*/
+	vector<ConfigSimuModelInfo_t *> m_vecModelInfo;/*模型信息*/
+	vector<ConfigExUserFile_t *> m_vecExUserFile;/*额外用户文件*/
+	vector<ConfigInputSig_t *> m_vecInputSig;/*模型输入信号*/
+	vector<ConfigRecordGroup_t*> m_vecRecordGroup;/*数据存储编组*/
+	vector<ConfigOutputSig_t *> m_vecOutputSig;/*模型输出信号*/
+	vector<ConfigInterParam_t *> m_vecParams;/*模型内部参数*/
+	vector<ConfigTestCase_t *> m_vecTestCase;/*测试用例*/
+	vector<ConfigTestTask_t *> m_vecTestTask;/*测试任务*/
+};
+

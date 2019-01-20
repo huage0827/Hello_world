@@ -1,0 +1,1115 @@
+/*****************************************************************
+ * 文件名: SimuConfigParser.cpp
+ * 功能: 解析模型配置文件源文件
+ *****************************************************************/
+#include <stdio.h>
+#include <string.h>
+#include "StdAfx.h"
+#include "Platform.h"
+#include "SimuConfigParser.h"
+#include <time.h>
+
+
+using namespace std;
+
+static void StrToVector(const char *src, const char* separateChar,std::vector<std::string>& vecDest);
+
+/* string to vector */
+static void StrToVector(const char *src, const char* separateChar,std::vector<std::string>& vecDest)
+{
+	vecDest.clear();
+	char* str = new char[strlen(src)+1];
+	memset(str , 0 , strlen(src)+1);
+	memcpy(str , src , strlen(src));
+	char* token = strtok(str, separateChar);
+	while( token != NULL )
+	{
+		vecDest.push_back(token);
+		token = strtok( NULL , separateChar);
+	}
+	delete []str;
+}
+
+CSimuConfigParser::CSimuConfigParser()
+{
+	m_bLoadCfg = false;
+	m_szErrorMsg = "";
+}
+
+CSimuConfigParser::~CSimuConfigParser()
+{
+	UnLoad();
+}
+
+/* 加载配置文件 */
+bool  CSimuConfigParser::LoadCfg(const char *szCfgFile)
+{
+	/* 释放资源 */
+	UnLoad();
+
+	TiXmlDocument   XmlDoc;
+	TiXmlElement	*pProjXmlEle = NULL;
+	TiXmlElement	*pSimuModelEle = NULL;
+	TiXmlElement	*pDataDictEle = NULL;
+	TiXmlElement	*pTestCaseEle = NULL;
+	TiXmlElement	*pTestTaskEle = NULL;
+	const char	*pTmpStr = NULL;
+
+	m_bLoadCfg = false;
+
+	/* 加载配置文件 */
+	if( szCfgFile == NULL){
+		m_szErrorMsg = "config file is null";
+		return false;
+	}
+
+	if( !XmlDoc.LoadFile(szCfgFile)){
+		m_szErrorMsg = "xmlDoc.loadFile failed";
+		printf("ErrorMsg:%s \n", XmlDoc.ErrorDesc());
+		return false;
+	}
+
+	/* 解析工程信息节点 */
+	pProjXmlEle = XmlDoc.RootElement();
+	if( pProjXmlEle == NULL){
+		m_szErrorMsg = "RootElement is null";
+		return false;
+	}
+
+	pTmpStr = pProjXmlEle->Value();
+	if( pTmpStr == NULL || _stricmp(pTmpStr, "SimuModelProject") != 0){
+		m_szErrorMsg = "simuModelProject ele is null";
+		return false;
+	}
+
+	pTmpStr = pProjXmlEle->Attribute("id");
+	if( pTmpStr == NULL){
+		m_szErrorMsg = "project id is null";
+		return false;
+	}
+	m_ProjInfo.szProjId = pTmpStr;
+
+	pTmpStr = pProjXmlEle->Attribute("name");
+	if( pTmpStr == NULL){
+		m_szErrorMsg = "project name is null";
+		return false;
+	}
+	m_ProjInfo.szProjName = pTmpStr;
+
+	pTmpStr = pProjXmlEle->Attribute("createTimes");
+	if( pTmpStr == NULL){
+		m_szErrorMsg = "project createTime is null";
+		return false;
+	}
+	m_ProjInfo.ulCreateTime = atol(pTmpStr);
+
+	/* 解析仿真模型信息节点 */
+	pSimuModelEle = pProjXmlEle->FirstChildElement("SimuModelInfo");
+	if( pSimuModelEle == NULL){
+		m_szErrorMsg = "SimuModelInfo node is null";
+		return false;
+	}
+
+	if( !ParseSimuModelNode(pSimuModelEle)){
+		return false;
+	}
+
+	/* 解析数据字典信息节点 */
+	pDataDictEle = pProjXmlEle->FirstChildElement("DataDictionary");
+	if( pDataDictEle == NULL){
+		m_szErrorMsg = "DataDictionary node is null";
+		return false;
+	}
+
+	if( !ParseDataDictNode(pDataDictEle)){
+		return false;
+	}
+
+	/* 解析测试用例信息节点 */
+	pTestCaseEle = pProjXmlEle->FirstChildElement("TestCases");
+	if( pTestCaseEle == NULL){
+		m_szErrorMsg = "TestCases node is null";
+		return false;
+	}
+
+	if( !ParseTestCaseNode(pTestCaseEle)){
+		return false;
+	}
+
+	/* 解析测试任务信息节点 */
+	pTestTaskEle = pProjXmlEle->FirstChildElement("TestTasks");
+	if( pTestTaskEle == NULL){
+		m_szErrorMsg = "TestTasks node is null";
+		return false;
+	}
+
+	if( !ParseTestTaskNode(pTestTaskEle)){
+		return false;
+	}
+
+	/* 解析成功 */
+	m_szErrorMsg = "";
+	m_bLoadCfg = true;
+	m_szCfgFile = szCfgFile;
+
+	return true;
+}
+
+/* 释放资源 */
+void  CSimuConfigParser::UnLoad()
+{
+	ConfigSimuModelInfo_t *pModelInfo = NULL;
+	ConfigExUserFile_t *pExFile = NULL;
+	ConfigInputSig_t *pInputSig = NULL;
+	ConfigOutputSig_t *pOutputSig = NULL;
+	ConfigInterParam_t *pParam = NULL;
+	ConfigTestCase_t *pTestCase = NULL;
+	ConfigTestTask_t *pTestTask = NULL;
+
+	m_bLoadCfg = false;
+	m_szCfgFile = "";
+	
+	/*模型信息*/
+	for( unsigned int i = 0; i < m_vecModelInfo.size(); i++){
+		pModelInfo = m_vecModelInfo.at(i);
+		delete pModelInfo;
+	}
+	m_vecModelInfo.clear();
+
+	/*额外用户文件*/
+	for( unsigned int i = 0; i < m_vecExUserFile.size(); i++){
+		pExFile = m_vecExUserFile.at(i);
+		delete pExFile;
+	}
+	m_vecExUserFile.clear();
+
+	/*模型输入信号*/
+	for( unsigned int i = 0; i < m_vecInputSig.size(); i++){
+		pInputSig = m_vecInputSig.at(i);
+		delete pInputSig;
+	}
+	m_vecInputSig.clear();
+
+	/*模型输出信号*/
+	for( unsigned int i = 0; i < m_vecOutputSig.size(); i++){
+		pOutputSig = m_vecOutputSig.at(i);
+		delete pOutputSig;
+	}
+	m_vecOutputSig.clear();
+
+	/*模型内部参数*/
+	for( unsigned int i = 0; i < m_vecParams.size(); i++){
+		pParam = m_vecParams.at(i);
+		delete pParam;
+	}
+	m_vecParams.clear();
+
+	/*测试用例*/
+	ConfigTestAction_t *pAction = NULL;
+	ConfigTestEvent_t *pEvent = NULL;
+
+	for( unsigned int i = 0; i < m_vecTestCase.size(); i++){
+		pTestCase = m_vecTestCase.at(i);
+
+		for( unsigned int j = 0; j < pTestCase->vecStartCond.size(); j++){
+			pAction = pTestCase->vecStartCond.at(j);
+			delete pAction;
+		}
+		pTestCase->vecStartCond.clear();
+
+		for( unsigned int j = 0; j < pTestCase->vecEndCond.size(); j++){
+			pEvent = pTestCase->vecEndCond.at(j);
+			delete pEvent;
+		}
+		pTestCase->vecEndCond.clear();
+		delete pTestCase;
+	}
+	m_vecTestCase.clear();
+
+	/*测试任务*/
+	ConfigTestExecCase_t *pExecCase = NULL;
+
+	for( unsigned int i = 0; i < m_vecTestTask.size(); i++){
+		pTestTask = m_vecTestTask.at(i);
+
+		for( unsigned int j = 0; j < pTestTask->vecExecCase.size(); j++){
+			pExecCase = pTestTask->vecExecCase.at(j);
+			delete pExecCase;
+		}
+		pTestTask->vecExecCase.clear();
+		delete pTestTask;
+	}
+	m_vecTestTask.clear();
+}
+
+/* 配置合法性检查*/
+bool  CSimuConfigParser::CheckCfg()
+{
+	if( !m_bLoadCfg){
+		m_szErrorMsg = "chekcCfg: not load config file";
+		return false;
+	}
+
+	CheckProject();
+	CheckSimuModel();
+	CheckModelInfo();
+	CheckExUserFile();
+	CheckInputSig();
+	CheckOutputSig();
+	CheckParams();
+	CheckTestCase();
+	CheckTestTask();
+
+	return true;
+}
+
+/* 获取错误信息*/
+const char *CSimuConfigParser::GetLastErrMsg()
+{
+	return m_szErrorMsg.c_str();
+}
+
+const char *CSimuConfigParser::GetCfgFile()
+{
+	if( !m_bLoadCfg)
+		return NULL;
+	else
+		return m_szCfgFile.c_str();
+}
+
+/* 数据返回 */
+const ConfigProjectInfo_t* CSimuConfigParser::GetProjInfo()
+{
+	return &m_ProjInfo;
+}
+
+const ConfigSimuMode_t* CSimuConfigParser::GetSimuMode()
+{
+	return &m_SimuMode;
+}
+
+const vector<ConfigSimuModelInfo_t *> *CSimuConfigParser::GetModelInfo()
+{
+	return &m_vecModelInfo;
+}
+
+const vector<ConfigExUserFile_t *> *CSimuConfigParser::GetExUserFile()
+{
+	return &m_vecExUserFile;
+}
+
+const vector<ConfigInputSig_t *> *CSimuConfigParser::GetInputSig()
+{
+	return &m_vecInputSig;
+}
+
+const vector<ConfigRecordGroup_t *> *CSimuConfigParser::GetRecordGroup()
+{
+	return &m_vecRecordGroup;
+}
+
+const vector<ConfigOutputSig_t *> *CSimuConfigParser::GetOutputSig()
+{
+	return &m_vecOutputSig;
+}
+
+const vector<ConfigInterParam_t *> *CSimuConfigParser::GetParams()
+{
+	return &m_vecParams;
+}
+
+const vector<ConfigTestCase_t *> *CSimuConfigParser::GetTestCase()
+{
+	return &m_vecTestCase;
+}
+
+const vector<ConfigTestTask_t *> *CSimuConfigParser::GetTestTask()
+{
+	return &m_vecTestTask;
+}
+
+
+/* 打印输出 */
+void CSimuConfigParser::PrintAll()
+{
+	PrintProject();
+	PrintSimuMode();
+	PrintModeInfo();
+	PrintExUserFile();
+	PrintInputSig();
+	PrintRecordGroup();
+	PrintOutputSig();
+	PrintParams();
+	PrintTestCase();
+	PrintTestTask();
+}
+
+void CSimuConfigParser::PrintProject()
+{
+	printf("------------------- Project -----------------\n");
+	printf("ProjId:%s, ProjName:%s, CreateTime:%d \n", m_ProjInfo.szProjId.c_str(),
+		m_ProjInfo.szProjName.c_str(), m_ProjInfo.ulCreateTime);
+}
+
+void CSimuConfigParser::PrintSimuMode()
+{
+	printf("-------------------- SimuMode----------------\n");
+	printf("SimuMode:%d, MasterID:%d, bAutoRun:%d, TaskId:%d, CaseId:%d \n",
+		m_SimuMode.eSimuMode, m_SimuMode.nMasterModelId, m_SimuMode.bAutoRun,
+		m_SimuMode.nTaskId, m_SimuMode.nCaseId);
+}
+
+void CSimuConfigParser::PrintModeInfo()
+{
+	printf("------------------ Model info ----------------\n");
+	ConfigSimuModelInfo_t *pModeInfo = NULL;
+
+	for( unsigned int i = 0; i < m_vecModelInfo.size(); i++){
+		pModeInfo = m_vecModelInfo.at(i);
+
+		printf("ID:%d, Name:%s, TargetIP:%s, nCoreNum:%d",pModeInfo->nId, 
+			pModeInfo->szName.c_str(), pModeInfo->szTargetIp.c_str(), pModeInfo->nCoreNum);
+		for( int j = 0; j < pModeInfo->nCoreNum; j++){
+			if( j == 0 )printf(",(%d", pModeInfo->szCore[j]);
+			else if( j == pModeInfo->nCoreNum -1 ) printf(",%d)",pModeInfo->szCore[j]);
+			else printf(",%d", pModeInfo->szCore[j]);
+		}
+		printf(",Step:%d, RecordRate:%d, DispRate:%d \n", pModeInfo->nRunStep,
+			pModeInfo->nRecordRate, pModeInfo->nDispRate);
+	}
+}
+
+void CSimuConfigParser::PrintExUserFile()
+{
+	printf("-------------------- ExUserFile ----------------\n");
+	ConfigExUserFile_t *pUserFile = NULL;
+
+	for( unsigned int i = 0; i < m_vecExUserFile.size(); i++){
+		pUserFile = m_vecExUserFile.at(i);
+
+		printf("i = %d, fileName:%s, fullPath:%s \n",i, pUserFile->szName.c_str(), pUserFile->szFullPath.c_str());
+	}
+}
+
+void CSimuConfigParser::PrintInputSig()
+{
+	printf("------------------ Input Signal ----------------\n");
+	ConfigInputSig_t *pInput = NULL;
+
+	for( unsigned int i = 0; i < m_vecInputSig.size(); i++){
+		pInput = m_vecInputSig.at(i);
+
+		printf("ModelID:%d => Id:%d, Name:%s, Type:%d, VecSize:%d, AssOutSigID:%d \n",
+			pInput->nModelId, pInput->nId, pInput->szName.c_str(), pInput->eDataType, 
+			pInput->nVecSize, pInput->nAssOutSigId);
+	}
+}
+
+void CSimuConfigParser::PrintRecordGroup()
+{
+	printf("------------------ Record Group -----------------\n");
+	ConfigRecordGroup_t *pGroup = NULL;
+
+	for( unsigned i = 0; i < m_vecRecordGroup.size(); i++){
+		pGroup = m_vecRecordGroup.at(i);
+
+		printf("ModelID:%d => Id:%d, Name:%s, Times:%d, RFile:%s, RPath:%s \n",
+			pGroup->nModelId, pGroup->nId, pGroup->szName.c_str(), pGroup->nRecordTimes,
+			pGroup->szRecordFile.c_str(), pGroup->szRecordPath.c_str());
+	}
+}
+
+void CSimuConfigParser::PrintOutputSig()
+{
+	printf("------------------ Output Signal ----------------\n");
+	ConfigOutputSig_t *pOutput = NULL;
+
+	for( unsigned int i = 0; i < m_vecOutputSig.size(); i++){
+		pOutput = m_vecOutputSig.at(i);
+	
+		/*
+		printf("ModelID:%d => Id:%d, Name:%s, Type:%d, VecSize:%d, bRecord:%d, recordTime:%d, recordFile:%s, bDisplay:%d, bSyncOut:%d \n",
+			pOutput->nModelId, pOutput->nId, pOutput->szName.c_str(), pOutput->eDataType, pOutput->nVecSize, 
+			pOutput->bRecord, pOutput->recordTimes, pOutput->szRecordFile.c_str(), pOutput->bDisplay, pOutput->bSyncOutput);*/
+		printf("ModelID:%d => Id:%d, Name:%s, Type:%d, VecSize:%d, bRecord:%d, RecordGroup:%d bDisplay:%d, bSyncOut:%d \n",
+			pOutput->nModelId, pOutput->nId, pOutput->szName.c_str(), pOutput->eDataType, pOutput->nVecSize, 
+			pOutput->bRecord, pOutput->nRecordGroup, pOutput->bDisplay, pOutput->bSyncOutput);
+	}
+}
+
+void CSimuConfigParser::PrintParams()
+{
+	printf("---------------------  Param -------------------\n");
+	ConfigInterParam_t *pParam = NULL;
+
+	for( unsigned int i = 0; i < m_vecParams.size(); i++){
+		pParam = m_vecParams.at(i);
+
+		printf("ModelID:%d => Id:%d, Name:%s, Type:%d, VecSize:%d\n",
+			pParam->nModelId, pParam->nId, pParam->szName.c_str(),
+			pParam->eDataType, pParam->nVecSize);
+	}
+}
+
+void CSimuConfigParser::PrintTestCase()
+{
+	printf("---------------------  TestCase -------------------\n");
+	ConfigTestCase_t *pTestCase = NULL;
+	ConfigTestAction_t *pAction = NULL;
+	ConfigTestEvent_t *pEvent = NULL;
+
+	for( unsigned int i = 0; i < m_vecTestCase.size(); i++){
+		pTestCase = m_vecTestCase.at(i);
+
+		printf("========= TestCase ID:%d, Name:%s, WaitTime:%d \n", pTestCase->nId, pTestCase->szName.c_str(), pTestCase->nWaitTime);
+		for( unsigned int j = 0; j < pTestCase->vecStartCond.size(); j++){
+			pAction = pTestCase->vecStartCond.at(j);
+			printf("==> DD_ID:%d, SetValue:%s \n", pAction->nDDId, pAction->szSetValue.c_str());
+		}
+		for( unsigned int j = 0; j < pTestCase->vecEndCond.size(); j++){
+			pEvent = pTestCase->vecEndCond.at(j);
+			printf("<< Type:%d, DD_ID:%d, Sign:%d, ReferValue:%s \n", pEvent->eType,
+				pEvent->nDDId, pEvent->eSign, pEvent->szReferValue.c_str());
+		}
+	}
+}
+
+void CSimuConfigParser::PrintTestTask()
+{
+	printf("---------------------  TestTask -------------------\n");
+	ConfigTestTask_t *pTestTask = NULL;
+	ConfigTestExecCase_t *pExec = NULL;
+
+	for( unsigned int i = 0; i < m_vecTestTask.size(); i++){
+		pTestTask = m_vecTestTask.at(i);
+		printf("======= Task -> ID:%d, Name:%s \n", pTestTask->nId, pTestTask->szName.c_str());
+		
+		for( unsigned int j = 0; j < pTestTask->vecExecCase.size(); j++){
+			pExec = pTestTask->vecExecCase.at(j);
+
+			printf("=> TestCase ID:%d, ExecTime:%d \n", pExec->nId, pExec->nExecTimes);
+		}
+	}
+}
+
+int CSimuConfigParser::GetDataTypeByteLen(int type)
+{
+	int nLen = 0;
+	switch(type){
+	case CONF_DATA_Type_unknown:
+		nLen = 0;break;
+	case CONF_DATA_Type_int8:
+		nLen = 1;break;
+	case CONF_DATA_Type_uInt8:
+		nLen = 1;break;
+	case CONF_DATA_Type_int16:
+		nLen = 2;break;
+	case CONF_DATA_Type_uInt16:
+		nLen = 2;break;
+	case CONF_DATA_Type_int32:
+		nLen = 4;break;
+	case CONF_DATA_Type_uInt32:
+		nLen = 4;break;
+	case CONF_DATA_Type_int64:
+		nLen = 8;break;
+	case CONF_DATA_Type_uInt64:
+		nLen = 8;break;
+	case CONF_DATA_Type_float:
+		nLen = 4;break;
+	case CONF_DATA_Type_double:
+		nLen = 8;break;
+	default:
+		nLen = 0;break;
+	}
+	return nLen;
+}
+
+int CSimuConfigParser::CopyProjectInfo(const ConfigProjectInfo_t *pSrcProj,ConfigProjectInfo_t *pDesProj)
+{
+	pDesProj->szProjId = pSrcProj->szProjId;
+	pDesProj->szProjName = pSrcProj->szProjName;
+	pDesProj->ulCreateTime = pSrcProj->ulCreateTime;
+	return 0;
+}
+
+int CSimuConfigParser::CopyModelInfo(const ConfigSimuModelInfo_t *pSrcModel, ConfigSimuModelInfo_t *pDesModel)
+{
+	pDesModel->nId = pSrcModel->nId;
+	pDesModel->nCoreNum = pSrcModel->nCoreNum;
+	pDesModel->nDispRate = pSrcModel->nDispRate;
+	pDesModel->nRecordRate = pSrcModel->nRecordRate;
+	pDesModel->nRunStep = pSrcModel->nRunStep;
+	pDesModel->szName = pSrcModel->szName;
+	pDesModel->szTargetIp = pSrcModel->szTargetIp;
+	memcpy(pDesModel->szCore, pSrcModel->szCore, pSrcModel->nCoreNum);
+	return 0;
+}
+
+int CSimuConfigParser::CopyInputSig(const ConfigInputSig_t *pSrcSig, ConfigInputSig_t *pDesSig)
+{
+	pDesSig->eDataType = pSrcSig->eDataType;
+	pDesSig->nAssOutSigId = pSrcSig->nAssOutSigId;
+	pDesSig->nId = pSrcSig->nId;
+	pDesSig->nModelId = pSrcSig->nModelId;
+	pDesSig->nVecSize = pSrcSig->nVecSize;
+	pDesSig->szName = pSrcSig->szName;
+	pDesSig->szTypeName = pSrcSig->szTypeName;
+	return 0;
+}
+
+int CSimuConfigParser::CopyOutputSig(const ConfigOutputSig_t *pSrcSig, ConfigOutputSig_t* pDesSig)
+{
+	pDesSig->bDisplay = pSrcSig->bDisplay;
+	pDesSig->bRecord = pSrcSig->bRecord;
+	pDesSig->bSyncOutput = pSrcSig->bSyncOutput;
+	pDesSig->eDataType = pSrcSig->eDataType;
+	pDesSig->nId = pSrcSig->nId;
+	pDesSig->nModelId = pSrcSig->nModelId;
+	pDesSig->nVecSize = pSrcSig->nVecSize;
+	pDesSig->szName = pSrcSig->szName;
+	pDesSig->szTypeName = pSrcSig->szTypeName;
+	return 0;
+}
+
+int CSimuConfigParser::CopyInterParam(const ConfigInterParam_t *pSrcParam, ConfigInterParam_t *pDesParam)
+{
+	pDesParam->eDataType = pSrcParam->eDataType;
+	pDesParam->nId = pSrcParam->nId;
+	pDesParam->nModelId = pSrcParam->nModelId;
+	pDesParam->nVecSize = pSrcParam->nVecSize;
+	pDesParam->szName = pSrcParam->szName;
+	pDesParam->szTypeName = pSrcParam->szTypeName;
+	return 0;
+}
+
+
+/*解析仿真模式节点*/
+bool CSimuConfigParser::ParseSimuModelNode(TiXmlElement *pRootXmlEle)
+{
+	TiXmlElement	*pSimuModeEle = NULL;
+	TiXmlElement	*pModelsEle = NULL;
+	TiXmlElement	*pSubModelEle = NULL;
+	TiXmlElement	*pUserFilesEle = NULL;
+	TiXmlElement	*pTmpXmlEle = NULL;
+	const char	*pTmpStr = NULL;
+
+	/* 解析仿真模式 */
+	pSimuModeEle = pRootXmlEle->FirstChildElement("SimulationMode");
+	if( pSimuModeEle == NULL){
+		m_szErrorMsg = "ParseSimuModelNode->SimulationMode is null";
+		return false;
+	}
+
+	pTmpStr = pSimuModeEle->Attribute("syncMode");
+	m_SimuMode.eSimuMode = (pTmpStr != NULL) ? (ConfigSyncModeTypeE)atol(pTmpStr) : CONF_SYNC_MODE_Type_software;
+
+	pTmpStr = pSimuModeEle->Attribute("autoRun");
+	m_SimuMode.bAutoRun = (pTmpStr != NULL && atoi(pTmpStr)==1) ? true: false;
+
+	pTmpStr = pSimuModeEle->Attribute("testTask_ID");
+	m_SimuMode.nTaskId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pSimuModeEle->Attribute("testCase_ID");
+	m_SimuMode.nCaseId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pSimuModeEle->Attribute("masterModel");
+	if( pTmpStr == NULL){
+		m_szErrorMsg = "ParseSimuModelNode->masterModel is null";
+		return false;
+	}
+	m_SimuMode.nMasterModelId = atoi(pTmpStr);
+
+	/* 解析模型信息 */
+	pModelsEle = pRootXmlEle->FirstChildElement("SimuModels");
+	if( pModelsEle == NULL){
+		m_szErrorMsg = "ParseSimuModelNode->SimuModels is null";
+		return false;
+	}
+
+	for( pSubModelEle = pModelsEle->FirstChildElement("SubModel"); pSubModelEle != NULL;
+		 pSubModelEle = pSubModelEle->NextSiblingElement("SubModel"))
+	{
+		ConfigSimuModelInfo_t *pConfModel = new ConfigSimuModelInfo_t;
+
+		pTmpStr = pSubModelEle->Attribute("id");
+		pConfModel->nId = (pTmpStr != NULL) ?  atoi(pTmpStr) : 0;
+
+		pTmpStr = pSubModelEle->Attribute("name");
+		pConfModel->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+		pTmpXmlEle = pSubModelEle->FirstChildElement("AssignTarget");
+		if( pTmpXmlEle != NULL){/* 解析分配下位机配置 */
+			pTmpStr = pTmpXmlEle->Attribute("target_ip");
+			pConfModel->szTargetIp = (pTmpStr != NULL)? pTmpStr : "";
+
+			pTmpStr = pTmpXmlEle->Attribute("core");
+			if( pTmpStr != NULL){/* 解析CPU分配 */
+				vector<string> vecCores;
+				vector<string> vecCore;
+				unsigned int idx;
+				int nCores = 0;
+				StrToVector(pTmpStr, "()", vecCores);
+				if( vecCores.size() >= 2){
+					nCores = atoi(vecCores[0].c_str());
+					StrToVector(vecCores[1].c_str(), ", ", vecCore);
+					for( idx = 0; idx < vecCore.size(); idx++){
+						pConfModel->szCore[idx] = atoi(vecCore[idx].c_str());
+						if( idx > 32 )break;
+					}
+					pConfModel->nCoreNum = vecCore.size();
+				}else{
+					pConfModel->nCoreNum = 0;
+				}
+			}else{
+				pConfModel->nCoreNum = 0;
+			}
+		}else{ /* AssignTarget节点为空 */
+			m_szErrorMsg = "ParseSimuModelNode->AssignTarget is null";
+			delete pConfModel;
+			return false;
+		}
+
+		/*解析仿真步长*/
+		pTmpXmlEle = pSubModelEle->FirstChildElement("RunStep");
+		if( pTmpXmlEle != NULL){
+			pTmpStr = pTmpXmlEle->GetText();
+			pConfModel->nRunStep = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+		}else{
+			m_szErrorMsg = "ParseSimuModelNode->RunStep is null";
+			delete pConfModel;
+			return false;
+		}
+
+		/*解析录制采样率*/
+		pTmpXmlEle = pSubModelEle->FirstChildElement("RecordRate");
+		if( pTmpXmlEle != NULL){
+			pTmpStr = pTmpXmlEle->GetText();
+			pConfModel->nRecordRate = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+		}else{
+			m_szErrorMsg = "ParseSimuModelNode->RunStep is null";
+			delete pConfModel;
+			return false;
+		}
+
+		/*解析监控采样率*/
+		pTmpXmlEle = pSubModelEle->FirstChildElement("DisplayRate");
+		if( pTmpXmlEle != NULL){
+			pTmpStr = pTmpXmlEle->GetText();
+			pConfModel->nDispRate = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+		}else{
+			m_szErrorMsg = "ParseSimuModelNode->RunStep is null";
+			delete pConfModel;
+			return false;
+		}
+
+		m_vecModelInfo.push_back(pConfModel);
+	}
+
+	/* 解析额外用户文件 */
+	pUserFilesEle = pRootXmlEle->FirstChildElement("ExUserFiles");
+	if( pUserFilesEle != NULL)
+	{	
+		for( pTmpXmlEle = pUserFilesEle->FirstChildElement("UserFile"); pTmpXmlEle != NULL;
+			pTmpXmlEle = pTmpXmlEle->NextSiblingElement("UserFile"))
+		{
+			ConfigExUserFile_t *pConfFile = new ConfigExUserFile_t;
+
+			pTmpStr = pTmpXmlEle->Attribute("fileName");
+			pConfFile->szName = (pTmpStr != NULL) ? pTmpStr : "" ;
+
+			pTmpStr = pTmpXmlEle->Attribute("FullPath");
+			pConfFile->szFullPath = (pTmpStr != NULL) ? pTmpStr : "";
+
+			m_vecExUserFile.push_back(pConfFile);
+		}
+	}else{
+		m_szErrorMsg = "ParseSimuModelNode->ExUserFiles is null";
+		return false;
+	}
+	return true;
+}
+
+/*解析数据字典节点*/
+bool CSimuConfigParser::ParseDataDictNode(TiXmlElement *pRootXmlEle)
+{
+	TiXmlElement	*pSubModelEle = NULL;
+	TiXmlElement	*pInputSigEle = NULL;
+	TiXmlElement	*pOutputSigEle = NULL;
+	TiXmlElement	*pInterParamEle = NULL;
+	TiXmlElement	*pTmpXmlEle = NULL;
+	const char	*pTmpStr = NULL;
+	unsigned int nModelId = 0;
+
+	for( pSubModelEle = pRootXmlEle->FirstChildElement("SubModel"); pSubModelEle != NULL;
+		pSubModelEle = pSubModelEle->NextSiblingElement("SubModel"))
+	{/*解析数据字典*/
+		pTmpStr = pSubModelEle->Attribute("Model_ID");
+		nModelId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+		pInputSigEle = pSubModelEle->FirstChildElement("InputSignals");
+		if( pInputSigEle != NULL){/* 解析输入信号*/
+			for( pTmpXmlEle = pInputSigEle->FirstChildElement("InputSig"); pTmpXmlEle != NULL;
+				pTmpXmlEle = pTmpXmlEle->NextSiblingElement("InputSig"))
+			{
+				ConfigInputSig_t *pInput = new ConfigInputSig_t;
+				pInput->nModelId = nModelId;
+				
+				if( ParseDataDict_InputSigNode(pTmpXmlEle, pInput)){
+					m_vecInputSig.push_back(pInput);
+				}else{
+					m_szErrorMsg = "ParseDataDictNode->ParseDataDict_InputSigNode failed";
+					delete pInput;
+					return false;
+				}
+			}
+		}
+
+		pOutputSigEle = pSubModelEle->FirstChildElement("OutputSignals");
+		if( pOutputSigEle != NULL){/* 解析输出信号*/
+			
+			for( pTmpXmlEle = pOutputSigEle->FirstChildElement("OutputSig"); pTmpXmlEle != NULL;
+				pTmpXmlEle = pTmpXmlEle->NextSiblingElement("OutputSig"))
+			{
+				ConfigOutputSig_t *pOutput = new ConfigOutputSig_t;
+				pOutput->nModelId = nModelId;
+
+				if( ParseDataDict_OutputSigNode(pTmpXmlEle, pOutput)){
+					m_vecOutputSig.push_back(pOutput);
+				}else{
+					m_szErrorMsg = "ParseDataDictNode->ParseDataDict_OutputSigNode failed";
+					delete pOutput;
+					return false;
+				}
+			}
+
+			/*解析录制组*/
+			ConfigRecordGroup_t *pRGroup = NULL;
+			char szDefault[256];
+			
+			// 新建默认分组
+			pRGroup = new ConfigRecordGroup_t;
+			pRGroup->nId = 1;
+			pRGroup->nModelId = nModelId;
+			pRGroup->nRecordTimes = 1;
+			pRGroup->szName = "defaultGroup";
+			sprintf(szDefault, "model%d_data_default_%d.sdf", nModelId, time(NULL));
+			pRGroup->szRecordFile = szDefault;
+			pRGroup->szRecordPath = "";
+			m_vecRecordGroup.push_back(pRGroup);
+
+			// 解析用户分组
+			for( pTmpXmlEle = pOutputSigEle->FirstChildElement("RecordGroup"); pTmpXmlEle != NULL;
+				pTmpXmlEle = pTmpXmlEle->NextSiblingElement("RecordGroup"))
+			{
+				pRGroup = new ConfigRecordGroup_t;
+				pRGroup->nModelId = nModelId;
+
+				if( ParseOutputRecordGroupNode(pTmpXmlEle, pRGroup)){
+					m_vecRecordGroup.push_back(pRGroup);
+				}else{
+					m_szErrorMsg = "ParseRecordGroupNod failed";
+					delete pRGroup;
+					return false;
+				}
+			}
+		}
+
+		pInterParamEle = pSubModelEle->FirstChildElement("InternalParams");
+		if( pInterParamEle != NULL){/* 解析输出信号*/
+			for( pTmpXmlEle = pInterParamEle->FirstChildElement("Param"); pTmpXmlEle != NULL;
+				pTmpXmlEle = pTmpXmlEle->NextSiblingElement("Param"))
+			{
+				ConfigInterParam_t *pParam = new ConfigInterParam_t;
+				pParam->nModelId = nModelId;
+
+				if( ParseDataDict_ParamNode(pTmpXmlEle, pParam)){
+					m_vecParams.push_back(pParam);
+				}else{
+					m_szErrorMsg = "ParseDataDictNode->ParseDataDict_ParamNode failed";
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
+/*解析输入信号节点*/
+bool CSimuConfigParser::ParseDataDict_InputSigNode(TiXmlElement *pRootXmlEle, ConfigInputSig_t *pInput)
+{
+	const char	*pTmpStr = NULL;
+
+	pTmpStr = pRootXmlEle->Attribute("id");
+	pInput->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("name");
+	pInput->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("dataType");
+	pInput->eDataType = (pTmpStr != NULL) ? (ConfigDataTypeE)atoi(pTmpStr): CONF_DATA_Type_unknown;
+
+	pTmpStr = pRootXmlEle->Attribute("typeName");
+	pInput->szTypeName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("vecSize");
+	pInput->nVecSize = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("assOutputSig_ID");
+	pInput->nAssOutSigId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	return true;
+}
+
+/*解析数据存储组节点*/
+bool CSimuConfigParser::ParseOutputRecordGroupNode(TiXmlElement *pRootXmlEle, ConfigRecordGroup_t *pGroup)
+{
+	const char *pTmpStr = NULL;
+
+	pTmpStr = pRootXmlEle->Attribute("id");
+	pGroup->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("name");
+	pGroup->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("recordTimes");
+	pGroup->nRecordTimes = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("recordFile");
+	pGroup->szRecordFile = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("recordPath");
+	pGroup->szRecordPath = (pTmpStr != NULL) ? pTmpStr : "";
+
+	return true;
+}
+
+/*解析输出信号节点*/
+bool CSimuConfigParser::ParseDataDict_OutputSigNode(TiXmlElement *pRootXmlEle, ConfigOutputSig_t *pOutput)
+{
+	const char	*pTmpStr = NULL;
+
+	pTmpStr = pRootXmlEle->Attribute("id");
+	pOutput->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("name");
+	pOutput->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("dataType");
+	pOutput->eDataType = (pTmpStr != NULL) ? (ConfigDataTypeE)atoi(pTmpStr): CONF_DATA_Type_unknown;
+
+	pTmpStr = pRootXmlEle->Attribute("typeName");
+	pOutput->szTypeName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("vecSize");
+	pOutput->nVecSize = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("record");
+	pOutput->bRecord = (pTmpStr != NULL && atoi(pTmpStr) == 1) ? true: false;
+
+	pTmpStr = pRootXmlEle->Attribute("recordGroup");
+	pOutput->nRecordGroup = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+	
+	if( pOutput->nRecordGroup <= 1){
+		pOutput->nRecordGroup = 1;
+	}
+
+	pTmpStr = pRootXmlEle->Attribute("display");
+	pOutput->bDisplay = (pTmpStr != NULL && atoi(pTmpStr) == 1) ? true: false;
+
+	pTmpStr = pRootXmlEle->Attribute("syncOutput");
+	pOutput->bSyncOutput = (pTmpStr != NULL && atoi(pTmpStr) == 1) ? true: false;
+
+	return true;
+}
+
+/*解析内部参数节点*/
+bool CSimuConfigParser::ParseDataDict_ParamNode(TiXmlElement *pRootXmlEle, ConfigInterParam_t *pParam)
+{
+	const char	*pTmpStr = NULL;
+
+	pTmpStr = pRootXmlEle->Attribute("id");
+	pParam->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	pTmpStr = pRootXmlEle->Attribute("name");
+	pParam->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("dataType");
+	pParam->eDataType = (pTmpStr != NULL) ? (ConfigDataTypeE)atoi(pTmpStr): CONF_DATA_Type_unknown;
+
+	pTmpStr = pRootXmlEle->Attribute("typeName");
+	pParam->szTypeName = (pTmpStr != NULL) ? pTmpStr : "";
+
+	pTmpStr = pRootXmlEle->Attribute("vecSize");
+	pParam->nVecSize = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+	return true;
+}
+
+/*解析测试用例节点*/
+bool CSimuConfigParser::ParseTestCaseNode(TiXmlElement *pRootXmlEle)
+{
+	TiXmlElement *pTestCaseEle = NULL;
+	TiXmlElement *pTestStartEle = NULL;
+	TiXmlElement *pTestEndEle = NULL;
+	TiXmlElement *pActionEle = NULL;
+	TiXmlElement *pEventEle = NULL;
+
+	const char	*pTmpStr = NULL;
+
+	for( pTestCaseEle = pRootXmlEle->FirstChildElement("TestCase"); pTestCaseEle != NULL;
+		pTestCaseEle = pTestCaseEle->NextSiblingElement("TestCase"))
+	{
+		ConfigTestCase_t *pTestCase = new ConfigTestCase_t;
+
+		pTmpStr = pTestCaseEle->Attribute("id");
+		pTestCase->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+		pTmpStr = pTestCaseEle->Attribute("name");
+		pTestCase->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+		pTmpStr = pTestCaseEle->Attribute("waitTime");
+		pTestCase->nWaitTime = (pTmpStr != NULL) ? atoi(pTmpStr):0;
+
+		/* TestStart */
+		pTestStartEle = pTestCaseEle->FirstChildElement("TestStart");
+		if( pTestStartEle != NULL){
+			for( pActionEle = pTestStartEle->FirstChildElement("Action"); pActionEle != NULL;
+				pActionEle = pActionEle->NextSiblingElement("Action"))
+			{/* Action */
+				ConfigTestAction_t  *pAction = new ConfigTestAction_t;
+				
+				pTmpStr = pActionEle->Attribute("DD_ID");
+				pAction->nDDId = (pTmpStr != NULL)? atoi(pTmpStr): 0;
+
+				pTmpStr = pActionEle->Attribute("SetValue");
+				pAction->szSetValue = (pTmpStr != NULL)? pTmpStr: "";
+
+				pTestCase->vecStartCond.push_back(pAction);
+			}
+		}else{
+			m_szErrorMsg = "ParseTestCaseNode->TestStart is NULL";
+			delete pTestCase;
+			return false;
+		}
+
+		/* TestEnd */
+		pTestEndEle = pTestCaseEle->FirstChildElement("TestEnd");
+		if( pTestEndEle != NULL){
+			for( pEventEle = pTestEndEle->FirstChildElement("Event"); pEventEle != NULL;
+				pEventEle = pEventEle->NextSiblingElement("Event"))
+			{/* Event */
+				ConfigTestEvent_t *pEvent = new ConfigTestEvent_t;
+
+				pTmpStr = pEventEle->Attribute("Type");
+				pEvent->eType = (pTmpStr != NULL)? (ConfigEventTypeE)atoi(pTmpStr): CONF_EVENT_Type_unknown;
+
+				pTmpStr = pEventEle->Attribute("DD_ID");
+				pEvent->nDDId = (pTmpStr != NULL)? atoi(pTmpStr): 0;
+
+				pTmpStr = pEventEle->Attribute("Sign");
+				pEvent->eSign = (pTmpStr != NULL)? (ConfigValueSignTypeE)atoi(pTmpStr): CONF_VAL_SIGN_Type_unknown;
+
+				pTmpStr = pEventEle->Attribute("ReferValue");
+				pEvent->szReferValue = (pTmpStr != NULL) ? pTmpStr : "";
+
+				pTestCase->vecEndCond.push_back(pEvent);
+			}
+		}else{
+			m_szErrorMsg = "ParseTestCaseNode->TestEnd is NULL";
+			delete pTestCase;
+			return false;
+		}
+
+		m_vecTestCase.push_back(pTestCase);
+	}
+	return true;
+}
+
+/*解析测试任务节点*/
+bool CSimuConfigParser::ParseTestTaskNode(TiXmlElement *pRootXmlEle)
+{
+	TiXmlElement *pTestTaskEle = NULL;
+	TiXmlElement *pTestCaseEle = NULL;
+
+	const char	*pTmpStr = NULL;
+
+	for( pTestTaskEle = pRootXmlEle->FirstChildElement("TestTask"); pTestTaskEle != NULL;
+		pTestTaskEle = pTestTaskEle->NextSiblingElement("TestTask"))
+	{/* TestTask */
+		ConfigTestTask_t *pTestTask = new ConfigTestTask_t;
+	
+		pTmpStr = pTestTaskEle->Attribute("id");
+		pTestTask->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+		pTmpStr = pTestTaskEle->Attribute("name");
+		pTestTask->szName = (pTmpStr != NULL) ? pTmpStr : "";
+
+		for( pTestCaseEle = pTestTaskEle->FirstChildElement("TestCase"); pTestCaseEle != NULL;
+			pTestCaseEle = pTestCaseEle->NextSiblingElement("TestCase"))
+		{/* TestExecCase */
+			ConfigTestExecCase_t *pExecCase = new ConfigTestExecCase_t;
+			
+			pTmpStr = pTestCaseEle->Attribute("id");
+			pExecCase->nId = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+			pTmpStr = pTestCaseEle->Attribute("execTimes");
+			pExecCase->nExecTimes = (pTmpStr != NULL) ? atoi(pTmpStr): 0;
+
+			pTestTask->vecExecCase.push_back(pExecCase);
+		}
+		m_vecTestTask.push_back(pTestTask);
+	}
+
+	return true;
+}
+
+bool CSimuConfigParser::CheckProject()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckSimuModel()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckModelInfo()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckExUserFile()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckInputSig()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckRecordGroup()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckOutputSig()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckParams()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckTestCase()
+{
+	return true;
+}
+
+bool CSimuConfigParser::CheckTestTask()
+{
+	return true;
+}

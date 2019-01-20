@@ -1,0 +1,122 @@
+#include "stdafx.h"
+#include "SimuDispDataC_DComm.h"
+
+CSimuDispDataC_DComm::CSimuDispDataC_DComm()
+{
+	m_bInit = false;
+	memset(m_szDispIp, 0x0, sizeof(m_szDispIp));
+	m_usPort = 0;
+}
+
+CSimuDispDataC_DComm::~CSimuDispDataC_DComm()
+{
+	Uninitialize();
+}
+
+bool CSimuDispDataC_DComm::Initialize(const char *szIp, unsigned short usPort)
+{
+	if( m_bInit){
+		return false;
+	}
+
+	strcpy(m_szDispIp, szIp);
+	m_usPort = usPort;
+
+	if( !InitSocket()){
+		return false;
+	}
+
+	InitializeCriticalSection(&m_criSocket);
+
+	m_bInit = true;
+	return true;
+}
+
+void CSimuDispDataC_DComm::Uninitialize()
+{
+	if( !m_bInit){
+		return;
+	}
+	closesocket(m_cltSocket);
+	DeleteCriticalSection(&m_criSocket);
+
+	m_bInit = false;
+}
+
+/* 发送数据 */
+int  CSimuDispDataC_DComm::SendData(unsigned char *szData, unsigned long nDataLen)
+{
+	int nSendLen = 0;
+	struct sockaddr_in remoteAddr;
+
+	memset(&remoteAddr, 0x0, sizeof(sockaddr_in));
+	remoteAddr.sin_family = AF_INET;
+	remoteAddr.sin_addr.s_addr = inet_addr(m_szDispIp);
+	remoteAddr.sin_port = htons(m_usPort);
+
+	EnterCriticalSection(&m_criSocket);
+	nSendLen = sendto(m_cltSocket, (char *)szData, nDataLen, 0,(const struct sockaddr*)&remoteAddr, sizeof(sockaddr_in));
+	LeaveCriticalSection(&m_criSocket);
+
+	return nSendLen;
+}
+
+/* 初始化客户端socket信息  */
+bool CSimuDispDataC_DComm::InitSocket()
+{
+	char		localIP[32];
+	sockaddr_in svrAddr;
+
+#ifndef QNX_PLATFORM
+	hostent*	localHost;
+	u_long		ul = 1;
+#else
+	unsigned long ul = 1;
+	memset(localIP , 0 , sizeof(localIP));
+#endif
+
+	if( _stricmp(m_szDispIp , "") == 0 )
+	{
+#ifndef QNX_PLATFORM
+		localHost = gethostbyname("");
+		char *tmpIp = inet_ntoa(*(struct in_addr *)*localHost->h_addr_list);
+		if( tmpIp != NULL){
+			strcpy(localIP, tmpIp);
+		}else{
+			return false;
+		}
+#else
+		GetLocalIp(localIP);
+#endif
+	}
+	else
+	{
+#ifdef QNX_PLATFORM
+		sprintf(localIP , "%s" , m_szDispIp);
+#else
+		sprintf_s(localIP , sizeof(localIP) , "%s" , m_szDispIp);
+#endif
+	}
+	if( localIP != NULL)
+		printf("szTargetIP = %s\n", localIP);
+
+	svrAddr.sin_family = AF_INET;
+	svrAddr.sin_port = htons(m_usPort);
+	svrAddr.sin_addr.s_addr = inet_addr(localIP);
+	memset(svrAddr.sin_zero, 0, 8 * sizeof(char));
+
+	m_cltSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	if (m_cltSocket == INVALID_SOCKET){
+		return false;
+	}
+
+	int zero = 0;
+	BOOL bOpt = FALSE;
+
+	ioctlsocket(m_cltSocket, FIONBIO, &ul);
+	setsockopt(m_cltSocket , SOL_SOCKET , SO_BROADCAST, (const char *)&bOpt, sizeof (BOOL));
+	setsockopt(m_cltSocket , SOL_SOCKET , SO_SNDBUF , (const char*)&zero , sizeof(int));
+	setsockopt(m_cltSocket , SOL_SOCKET , SO_RCVBUF , (const char*)&zero , sizeof(int));
+
+	return true;
+}

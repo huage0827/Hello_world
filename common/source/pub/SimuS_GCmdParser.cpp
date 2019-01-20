@@ -1,0 +1,420 @@
+/*****************************************************************
+ * 文件名: SimuS_GCmdParser.cpp
+ * 功能: SimuService和SimuGuard之间通信命令执行和解析器实现
+ *****************************************************************/
+#include "stdafx.h"
+
+#ifdef SIMULAB_USE_COMMU_S_G
+
+#include "SimuS_GCmdParser.h"
+#include "SimuS_GComm.h"
+
+/*****************************************************************
+ *  函数名：	SimuS_GCmdParseThread
+ *  功能：		SimuService和SimuGuard之间的命令执行线程
+ *  入参:		LPVOID lpParam -- 创建线程时传递进来的线程额外信息
+ *  出参:		无
+ *  返回值:		DWORD(QNX: void*) -- 线程退出时传递给操作系统的值
+ *****************************************************************/
+#if defined(QNX_PLATFORM)|| defined(LINUX_PLATFORM)
+void* SimuS_GCmdParseThread(LPVOID lpParam)
+#else
+DWORD WINAPI SimuS_GCmdParseThread(LPVOID lpParam)
+#endif
+{
+	CSimuS_GCmdParser* pParser = (CSimuS_GCmdParser*)lpParam;
+#ifdef WIN_PLATFORM
+	unsigned long nTick = 1;
+#endif
+	
+	while( 1 )
+	{
+		if( WaitForSingleObject(pParser->m_hParseEvent , 0) == WAIT_OBJECT_0 )
+		{
+			break;
+		}
+		pParser->ExecAllCmd();
+#ifdef WIN_PLATFORM
+		/*if( nTick++ == 1000 )
+		{
+			nTick = 1;
+			Sleep(1);
+		}*/
+		Sleep(2);
+#else
+		usleep(1);
+#endif
+	}
+	return 0;
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::CSimuS_GCmdParser
+ *  功能：		SimuService和SimuGuard之间的命令解析器类构造函数
+ *  入参:		KL_CLIENT_ID nClientID -- SimuService客户端ID号
+ *				CSimuS_GComm* pSimuS_GComm -- SimuService和SimuGuard之间的通信器
+ *  出参:		无
+ *  返回值:		无
+ *****************************************************************/
+CSimuS_GCmdParser::CSimuS_GCmdParser(KL_CLIENT_ID nClientID , CSimuS_GComm* pSimuS_GComm)
+{
+	m_bInitialize = FALSE;
+	m_nClientID = nClientID;
+	m_pSimuS_GComm = pSimuS_GComm;
+	m_szBuffer = NULL;
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::~CSimuS_GCmdParser
+ *  功能：		SimuService和SimuGuard之间的命令解析器类析构函数
+ *  入参:		无
+ *  出参:		无
+ *  返回值:		无
+ *****************************************************************/
+CSimuS_GCmdParser::~CSimuS_GCmdParser()
+{
+	Uninitialize();
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::Initialize
+ *  功能：		初始化命令解析器
+ *  入参:		无
+ *  出参:		无
+ *  返回值:		TRUE -- 初始化成功 , FALSE -- 初始化失败
+ *****************************************************************/
+BOOL CSimuS_GCmdParser::Initialize()
+{
+	if( m_bInitialize )
+		return FALSE;
+
+	m_pCmdExecutorInterface = new CSimuS_GCmdExecutor(m_nClientID, m_pSimuS_GComm);
+
+	m_szBuffer = NULL;
+	m_nBufferLen = 0;
+	InitializeCriticalSection(&m_criCmd);
+
+	DWORD threadID;
+
+	m_hParseEvent = CreateEvent(NULL , TRUE , FALSE , NULL);
+
+	m_hParseThread = ::CreateThread(NULL, 0, SimuS_GCmdParseThread, this, 0, &threadID);
+	if( m_hParseThread == INVALID_HANDLE_VALUE )
+	{
+		CloseHandle(m_hParseEvent);
+		DeleteCriticalSection(&m_criCmd);
+		delete m_pCmdExecutorInterface;
+		return FALSE;
+	}
+
+	m_bInitialize = TRUE;
+	return TRUE;
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::Uninitialize
+ *  功能：		卸载命令解析器并释放资源
+ *  入参:		无
+ *  出参:		无
+ *  返回值:		无
+ *****************************************************************/
+void CSimuS_GCmdParser::Uninitialize()
+{
+	if( !m_bInitialize )
+		return ;
+
+	SetEvent(m_hParseEvent);
+	WaitForSingleObject(m_hParseThread , INFINITE);
+	CloseHandle(m_hParseThread);
+	CloseHandle(m_hParseEvent);
+	vector<CSimuS_GCmd*>::iterator iter;
+	EnterCriticalSection(&m_criCmd);
+	for( iter = m_vecCmd.begin() ; iter != m_vecCmd.end() ; iter++ )
+	{
+		delete (*iter);
+	}
+	m_vecCmd.clear();
+	if( m_szBuffer != NULL )
+		delete []m_szBuffer;
+	m_szBuffer = NULL;
+	m_nBufferLen = 0;
+	LeaveCriticalSection(&m_criCmd);
+	DeleteCriticalSection(&m_criCmd);
+	delete m_pCmdExecutorInterface;
+	m_bInitialize = FALSE;
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::Parse
+ *  功能：		把指定的数据解析成命令执行器可执行的命令
+ *  入参:		unsigned char* szData -- 欲解析的数据缓冲区
+ *				unsigned long nDataLen -- 欲解析的数据缓冲区长度
+ *  出参:		无
+ *  返回值:		TRUE -- 解析成功 , FALSE -- 解析失败
+ *****************************************************************/
+BOOL CSimuS_GCmdParser::Parse(unsigned char* szData , unsigned long nDataLen)
+{
+	if( !m_bInitialize )
+	{
+		return FALSE;
+	}
+	if( nDataLen > 0 )
+	{
+		unsigned char *szBufferTmp = NULL;
+		if( m_nBufferLen > 0 )
+		{
+			szBufferTmp = new unsigned char[m_nBufferLen];
+			memcpy(szBufferTmp , m_szBuffer , m_nBufferLen);
+			delete []m_szBuffer;
+			m_szBuffer = NULL;
+		}
+		m_szBuffer = new unsigned char[m_nBufferLen + nDataLen];
+		if( m_nBufferLen > 0 )
+		{
+			memcpy(m_szBuffer , szBufferTmp , m_nBufferLen);
+		}
+		memcpy(m_szBuffer + m_nBufferLen , szData , nDataLen);
+		m_nBufferLen += nDataLen;
+	}
+
+	unsigned long nCmdDataLen = 0;
+
+	while( 1 )
+	{
+		EnterCriticalSection(&m_criCmd);
+		S_G_CMD sgc = CSimuS_GCmd::PreParseCmd(m_szBuffer , m_nBufferLen , nCmdDataLen);
+		if( sgc != S_G_CMD_UNKNOWN )
+		{
+			unsigned char *szCmdData = new unsigned char[nCmdDataLen];
+			unsigned char *szNewBuffer = NULL;
+
+			memcpy(szCmdData , m_szBuffer , nCmdDataLen);
+
+			if( m_nBufferLen - nCmdDataLen > 0 )
+			{
+				szNewBuffer = new unsigned char[m_nBufferLen - nCmdDataLen];
+				m_nBufferLen -= nCmdDataLen;
+				memcpy(szNewBuffer , m_szBuffer + nCmdDataLen , m_nBufferLen);
+				delete []m_szBuffer;
+				m_szBuffer = szNewBuffer;
+			}
+			else
+			{
+				delete []m_szBuffer;
+				m_szBuffer = NULL;
+				m_nBufferLen = 0;
+			}
+
+			CSimuS_GCmd* pCmd = NULL;
+#ifdef WIN_PLATFORM
+			switch( sgc )
+#else
+			switch( sgc & 0x00000000FFFFFFFF )
+#endif
+			{
+			case S_G_CMD_LOADSIMUMODEL :
+				{
+					pCmd = new CSimuS_GLoadSimuModelCmd;
+					break;
+				}
+			case S_G_CMD_LOADSIMUMODEL_RESP :
+				{
+					pCmd = new CSimuS_GLoadSimuModelRespCmd;
+					break;
+				}
+			case S_G_CMD_EXECSIMUMODEL :
+				{
+					pCmd = new CSimuS_GExecSimuModelCmd;
+					break;
+				}
+			case S_G_CMD_EXECSIMUMODEL_RESP :
+				{
+					pCmd = new CSimuS_GExecSimuModelRespCmd;
+					break;
+				}
+			case S_G_CMD_PAUSESIMUMODEL :
+				{
+					pCmd = new CSimuS_GPauseSimuModelCmd;
+					break;
+				}
+			case S_G_CMD_PAUSESIMUMODEL_RESP :
+				{
+					pCmd = new CSimuS_GPauseSimuModelRespCmd;
+					break;
+				}
+			case S_G_CMD_RESETSIMUMODEL :
+				{
+					pCmd = new CSimuS_GResetSimuModelCmd;
+					break;
+				}
+			case S_G_CMD_RESETSIMUMODEL_RESP :
+				{
+					pCmd = new CSimuS_GResetSimuModelRespCmd;
+					break;
+				}
+			case S_G_CMD_SETMODELPARAM :
+				{
+					pCmd = new CSimuS_GSetSimuModelParamCmd;
+					break;
+				}
+			case S_G_CMD_SETMODELPARAM_RESP :
+				{
+					pCmd = new CSimuS_GSetSimuModelParamRespCmd;
+					break;
+				}
+			case S_G_CMD_TESTEVENT_REPORT :
+				{
+					pCmd = new CSimuS_GTestEventReportCmd;
+					break;
+				}
+			case S_G_CMD_EXCEPTEVENT_REPORT :
+				{
+					pCmd = new CSimuS_GExceptEventReportCmd;
+					break;
+				}
+			case S_G_CMD_COMPILESIMUMODEL :
+				{
+					pCmd = new CSimuS_GCompileSimuModelCmd;
+					break;
+				}
+			case S_G_CMD_COMPILESIMUMODEL_RESP :
+				{
+					pCmd = new CSimuS_GCompileSimuModelRespCmd;
+					break;
+				}
+			case S_G_CMD_COMPILEINFO_REPORT :
+				{
+					pCmd = new CSimuS_GCompileInfoRepCmd;
+					break;
+				}
+
+			default:
+				break;
+			}
+
+			if( pCmd != NULL )
+			{
+				if( pCmd->Unserialize(szCmdData , nCmdDataLen) )
+				{
+					m_vecCmd.push_back(pCmd);
+				}
+				else
+				{
+					delete pCmd;
+				}
+			}
+			delete []szCmdData;
+		}
+		else
+		{
+			LeaveCriticalSection(&m_criCmd);
+			break;
+		}
+		LeaveCriticalSection(&m_criCmd);
+		//Sleep(30);
+	}
+
+	return TRUE;
+}
+
+/*****************************************************************
+ *  函数名：	CSimuS_GCmdParser::ExecAllCmd
+ *  功能：		执行所有已解析的命令
+ *  入参:		无
+ *  出参:		无
+ *  返回值:		TRUE -- 执行成功 , FALSE -- 执行失败
+ *****************************************************************/
+BOOL CSimuS_GCmdParser::ExecAllCmd()
+{
+	vector<CSimuS_GCmd*>::iterator iter;
+	EnterCriticalSection(&m_criCmd);
+	for( iter = m_vecCmd.begin() ; iter != m_vecCmd.end() ; iter++ )
+	{
+		switch( (*iter)->GetCmdType() )
+		{
+		case S_G_CMD_LOADSIMUMODEL :
+			{
+				m_pCmdExecutorInterface->ExecLoadSimuModelCmd((CSimuS_GLoadSimuModelCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_LOADSIMUMODEL_RESP :
+			{
+				m_pCmdExecutorInterface->ExecLoadSimuModelRespCmd((CSimuS_GLoadSimuModelRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_EXECSIMUMODEL :
+			{
+				m_pCmdExecutorInterface->ExecExecSimuModelCmd((CSimuS_GExecSimuModelCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_EXECSIMUMODEL_RESP :
+			{
+				m_pCmdExecutorInterface->ExecExecSimuModelRespCmd((CSimuS_GExecSimuModelRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_PAUSESIMUMODEL :
+			{
+				m_pCmdExecutorInterface->ExecPauseSimuModelCmd((CSimuS_GPauseSimuModelCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_PAUSESIMUMODEL_RESP :
+			{
+				m_pCmdExecutorInterface->ExecPauseSimuModelRespCmd((CSimuS_GPauseSimuModelRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_RESETSIMUMODEL :
+			{
+				m_pCmdExecutorInterface->ExecResetSimuModelCmd((CSimuS_GResetSimuModelCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_RESETSIMUMODEL_RESP :
+			{
+				m_pCmdExecutorInterface->ExecResetSimuModelRespCmd((CSimuS_GResetSimuModelRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_SETMODELPARAM :
+			{
+				m_pCmdExecutorInterface->ExecSetModelParamCmd((CSimuS_GSetSimuModelParamCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_SETMODELPARAM_RESP :
+			{
+				m_pCmdExecutorInterface->ExecSetModelParamRespCmd((CSimuS_GSetSimuModelParamRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_TESTEVENT_REPORT :
+			{
+				m_pCmdExecutorInterface->ExecTestEventReportCmd((CSimuS_GTestEventReportCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_EXCEPTEVENT_REPORT :
+			{
+				m_pCmdExecutorInterface->ExecExceptEventReportCmd((CSimuS_GExceptEventReportCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_COMPILESIMUMODEL:
+			{
+				m_pCmdExecutorInterface->ExecCompileSimuModelCmd((CSimuS_GCompileSimuModelCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_COMPILESIMUMODEL_RESP :
+			{
+				m_pCmdExecutorInterface->ExecCompileSimuModelRespCmd((CSimuS_GCompileSimuModelRespCmd*)(*iter));
+				break;
+			}
+		case S_G_CMD_COMPILEINFO_REPORT :
+			{
+				m_pCmdExecutorInterface->ExecCompileInfoReportCmd((CSimuS_GCompileInfoRepCmd*)(*iter));
+				break;
+			}
+		default:
+			break;
+		}
+		delete *iter;
+	}
+	m_vecCmd.clear();
+	LeaveCriticalSection(&m_criCmd);
+	return TRUE;
+}
+
+#endif

@@ -1,0 +1,156 @@
+/*****************************************************************
+ * 文件名: SimuCommuAddrDef.h
+ * 功能: 模块间通信地址定义
+ *****************************************************************/
+#pragma  once
+
+//#include "Platform.h"
+
+/******************************************************************
+ * 通信接口: 1-> SimuL_SComm接口
+ * 简称：L_S
+ * 方式：TCP通信
+ * 说明：服务器为SimuService,客户端为SimuLab,传送控制命令
+ ******************************************************************/
+#define KL_COMMU_L_S_TCP_PORT  2001
+
+/******************************************************************
+ * 通信接口: 2-> SimuD_SComm接口
+ * 简称：D_S
+ * 方式：TCP通信
+ * 说明：服务器为SimuService,客户端为SimuMonitor,传送控制命令
+ ******************************************************************/
+#define KL_COMMU_D_S_TCP_PORT  2002
+
+/******************************************************************
+ * 通信接口: 3-> SimuS_GComm接口
+ * 简称：S_G
+ * 方式：TCP通信
+ * 说明：服务器为SimuGuard,客户端为SimuService,传送控制命令
+ ******************************************************************/
+#define KL_COMMU_S_G_TCP_PORT  2003
+
+/******************************************************************
+ * 通信接口: 4-> SimuDispDataC_DComm接口
+ * 简称：DispDataC_D
+ * 方式：UDP通信
+ * 说明：服务器为SimuMonitor,客户端为SimuService或SimuGuard
+ ******************************************************************/
+#define KL_COMMU_DISP_DATA_C_D_UDP_PORT  2004
+
+/******************************************************************
+ * 通信接口: 5-> SimuStorDataC_DComm接口
+ * 简称：StorDataC_D
+ * 方式：TCP通信
+ * 说明：服务器为SimuMonitor,客户端为SimuService或SimuGuard
+   数据传输：
+   链路层 => 最大传输单元 1500
+   网络层 => MTU 1480
+   传输层 => UPD MTU = 1472
+			IP数据包最大长度为64K 即 65535
+ ******************************************************************/
+#ifdef WIN_PLATFORM 
+#define KL_COMMU_M_C_STOR_DATA_SHM_NAME "tmp_klcommu_StorDataC_D_shm_name"
+#define KL_COMMU_M_C_STOR_DATA_LOCK_NAME "tmp_klcommu_StorDataC_D_sem_lock"
+#define KL_COMMU_M_C_STOR_DATA_SEM_SIG	"tmp_klcommu_StorDataC_D_sem_signal"
+#endif
+
+#define KL_COMMU_STOR_DATA_C_D_TCP_PORT  2005
+#define KL_COMMU_STOR_DATA_SEND_MAX_DATA_UNIT 1024*40 // 40K
+
+/******************************************************************
+ * 通信接口: 6-> SimuM_CComm接口
+ * 简称：M_C
+ * 方式：共享内存+信号量
+ * 说明：服务器为SimuGuard或SimuService,客户端为SimuModel,
+ * 		传送控制命令及采集模型数据。
+ ******************************************************************/
+#if defined(QNX_PLATFORM)
+#define KL_COMMU_M_C_MREAD_SHM_NAME "/tmp/klcommu_MC_Mread_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SHM_NAME "/tmp/klcommu_MC_Mwrite_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SEM_NAME "/tmp/klcommu_MC_Mwrite_sem_path_%ld"
+
+#elif defined(LINUX_PLATFORM)
+#define KL_COMMU_M_C_MREAD_SHM_NAME "tmp_klcommu_MC_Mread_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SHM_NAME "tmp_klcommu_MC_Mwrite_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SEM_NAME "tmp_klcommu_MC_Mwrite_sem_path_%ld"
+
+#elif defined(WIN_PLATFORM)
+#define KL_COMMU_M_C_MREAD_SHM_NAME "tmp_klcommu_MC_Mread_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SHM_NAME "tmp_klcommu_MC_Mwrite_shm_path_%ld"
+#define KL_COMMU_M_C_MWRITE_SEM_NAME "tmp_klcommu_MC_Mwrite_sem_path_%ld"
+#define KL_COMMU_M_C_MREAD_SHM_LOCK_NAME "tmp_klcommu_MC_Mread_shm_lock_%ld"
+#define KL_COMMU_M_C_MWRITE_SHM_LOCK_NAME "tmp_klcommu_MC_Mwrite_shm_lock_%ld"
+#else
+
+#endif
+
+/******************************************************************
+ * 通信接口: 7.SimuDataM_MComm接口
+ * 简称：DataM_M
+ * 方式：共享内存+信号量
+ * 说明：数据同步。第一个%ld为数据发送模型id，第二个%ld为数据接收模型id
+ ******************************************************************/
+#if defined(QNX_PLATFORM)
+#define KL_COMMU_DataM_M_shm_name "/tmp/klcommu_DataM_M_shm_M%ld_to_M%ld"
+
+#elif defined(LINUX_PLATFORM)
+#define KL_COMMU_DataM_M_shm_name "tmp_klcommu_DataM_M_shm_M%ld_to_M%ld"
+
+#elif defined(WIN_PLATFORM)
+#define KL_COMMU_DataM_M_shm_name "tmp_klcommu_DataM_M_shm_M%ld_to_M%ld"
+#define KL_COMMU_DataM_M_shm_lock "tmp_klcommu_DataM_M_shm_lock_M%ld_to_M%ld"
+
+#endif
+
+/******************************************************************
+ * 通信接口: 8.SimuClockM_MComm接口
+ * 简称：ClockM_M
+ * 方式：信号量
+ * 说明：时钟同步。主控模型发送信号，被控模型等待信号，%ld->被控模型模型id
+ ******************************************************************/
+#if defined(QNX_PLATFORM)
+#define KL_COMMU_ClockM_M_sem_name "/tmp/klcommu_ClockM_M_sem_name_%d"
+
+#elif defined(LINUX_PLATFORM)
+#define KL_COMMU_ClockM_M_sem_name "tmp_klcommu_ClockM_M_sem_name_%d"
+
+#elif defined(WIN_PLATFORM)
+#define KL_COMMU_ClockM_M_sem_name "tmp_klcommu_ClockM_M_sem_name_%d"
+#define KL_COMMU_ClockM_M_stepExec_shmName "tmp_klcommu_ClockM_M_stepExec_shmName"
+#define KL_COMMU_ClockM_M_stepExec_semName "tmp_klcommu_ClockM_M_stepExec_semName"
+
+#else
+
+#endif
+
+/******************************************************************
+ * 通信接口: 9-> SimuL_TComm接口
+ * 简称：L_T
+ * 方式：UDP通信
+ * 说明：服务器为SimuGuard,客户端为SimuLab
+ ******************************************************************/
+#define KL_COMMU_L_T_UDP_PORT  2009
+
+
+/******************************************************************
+ * 通信接口: 10-> SimuDebugL_GComm接口
+ * 简称：DebugL_G
+ * 方式：TCP通信
+ * 说明：服务器为gdbserver,客户端为SimuLab(gdb)
+ ******************************************************************/
+#define KL_COMMU_DEBUG_L_G_TCP_BASE_PORT  2010
+#define KL_COMMU_DEBUG_L_G_TCP_PORT(nModelId) (nModelId + KL_COMMU_DEBUG_L_G_TCP_BASE_PORT)
+
+
+/******************************************************************
+ * 通信接口: 
+ * 简称：
+ * 方式：
+ * 说明：
+ ******************************************************************/
+#define KL_COMMU_SINGLE_INST_NAME_SimuService "kl_commu_single_inst_name_simuservice"
+#define KL_COMMU_SINGLE_INST_NAME_SimuMonitor "kl_commu_single_inst_name_simumonitor"
+
+#define KL_APP_NAME_SimuService "SimuService.exe"
+#define KL_APP_NAME_SimuMonitor "SimuMonitor.exe"

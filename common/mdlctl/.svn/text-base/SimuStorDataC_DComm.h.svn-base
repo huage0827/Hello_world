@@ -1,0 +1,47 @@
+#pragma  once
+#include "SimuStorDataC_DCmd.h"
+#include "SimuCommAPI.h"
+
+/*通信类型*/
+typedef enum{
+	SDC_DCommType_TCP = 1, /*TCP_IP*/
+	SDC_DCommType_Shm = 2, /*ShareMemory*/
+}StorDataC_DComm_Type;
+
+/*数据存储通信接口*/
+class CSimuStorDataC_DComm
+{
+public:
+	CSimuStorDataC_DComm();
+	virtual ~CSimuStorDataC_DComm();
+
+	/*初始化*/
+	bool Initialize(const char *szIp, unsigned short usPort, bool bLocalUseShareMem = false);
+
+	/*反初始化*/
+	void Uninitialize();
+
+	/*数据发送接口*/
+	int  SendData(unsigned char *szData, unsigned long nDataLen);
+	void ClearShm();
+
+	void OnRcvedStorSvrData(unsigned char* szData , unsigned long nDataLen);
+	void OnStorSvrConnected(KLConnectInfo* pConnectInfo);
+	void OnStorSvrDisconnected(KLConnectInfo* pConnectInfo);
+
+private:
+	bool m_bInit; /*初始化标志*/
+	StorDataC_DComm_Type m_SDataC_DCommType;/*通信类型*/
+
+	/*TCP_IP*/
+	bool m_bConnect;/*连接服务器标志*/
+	char m_szStorIp[128];/*存储服务器IP地址*/
+	unsigned short m_usPort;/*存储服务器IP端口*/
+	unsigned long  m_nClientID;/*通信客户端*/
+	
+	/*ShareMemory*/
+	HANDLE m_hWriteShmfd;
+	CommuSimuStorDataC_DShm_t *m_pWriteShm;
+	HANDLE m_hWriteShmLock;
+	HANDLE m_hWriteSemSignal;
+};

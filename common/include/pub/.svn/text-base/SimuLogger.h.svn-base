@@ -1,0 +1,79 @@
+#pragma once
+#include <stdio.h>
+#include <iostream>
+#include <sstream>
+
+using namespace std;
+
+////////////////////////////////////////////////////
+typedef enum EnumSimuLogLevel{
+	SIMU_LOG_FORCE,
+	SIMU_LOG_ERR,
+	SIMU_LOG_ALARM,
+	SIMU_LOG_WARN,
+	SIMU_LOG_NOTICE,
+	SIMU_LOG_INFO,
+	SIMU_LOG_LDEBUG,
+	SIMU_LOG_DDEBUG,
+}ESimuLogLevel;
+
+bool SimuLoggerInit(ESimuLogLevel eLevel,const char *LogFileName);
+ESimuLogLevel GetSimuLogLevel();
+
+/*
+ * LOG(LDEBUG) << " your log";
+ * */
+
+#ifdef QNX_PLATFORM
+#include <pthread.h>
+
+/*#define _LOG(level) SimuLogger(SIMU_LOG_##level).get()<< pthread_self() << \
+	" " __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": "
+*/
+
+#define _LOG(level) SimuLogger(SIMU_LOG_##level).get()<<  \
+	"=> [" << pthread_self()  << "] " << __FUNCTION__ << ": "
+
+#else
+
+/*
+#define _LOG(level) SimuLogger(SIMU_LOG_##level).get()<< \
+	" " __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": "
+*/
+
+#define _LOG(level) SimuLogger(SIMU_LOG_##level).get()<< \
+	"=> [" << GetCurrentThreadId() << "] " << __FUNCTION__ << ": "
+
+#endif
+
+#define LOG(wLevel) \
+	if( SIMU_LOG_##wLevel <= GetSimuLogLevel()) _LOG(wLevel)
+
+#define SIMU_LOGGER_CFG_FILE_NAME "SimuLogger.cfg"
+
+/*
+const char* SimuLoggerCfgItemKeys[] = {
+	"LogLevel",
+	"LogFileName",
+	"LogFileShared",
+};*/
+
+///////////////////////////////////////////////////////
+
+class SimuLogger
+{
+protected:
+	ostringstream  		m_Stream;
+	ESimuLogLevel		m_ReportLevel;
+public:
+	SimuLogger(ESimuLogLevel wReportLevel):m_ReportLevel(wReportLevel)
+	{ }
+	~SimuLogger();
+	ostringstream& get();
+};
+///////////////////////////////////////////////////////
+
+
+
+
+

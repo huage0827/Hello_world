@@ -1,0 +1,416 @@
+/*****************************************************************
+ * 文件名: SimuM_CCmd.h
+ * 功能: SimuService、SimuGuard与SimuModel之间通信命令定义
+ *****************************************************************/
+#pragma  once
+
+#ifndef WIN_PLATFORM
+#include "stdafx.h"
+#endif
+
+#include <vector>
+#include "SimuCommunicationDef.h"
+
+using namespace std;
+
+/****************************************************************
+ * 枚举名 : M_C_CMD
+ * 说明 : SimuService、SimuGuard与SimuModel之间通信命令字定义
+ ****************************************************************/
+typedef enum euM_C_CMD
+{
+	M_C_CMD_Unknown				= -1 ,		  /* 未知命令*/
+	M_C_CMD_ExecSimuModel		= 0x30000001, /* C->M 执行仿真模型请求 */
+	M_C_CMD_PauseSimuModel		= 0x30000002, /* C->M 暂停仿真模型请求 */
+	M_C_CMD_ResetSimuModel		= 0x30000003, /* C->M 重置仿真模型请求 */
+	M_C_CMD_SetModelParam		= 0x30000004, /* C->M 设置模型参数请求 */
+
+	M_C_CMD_RegisterModel		= 0xB0000001, /* M->C 注册仿真模型请求 */
+	M_C_CMD_TestEventReport		= 0xB0000002, /* M->C 测试事件上报 */
+	M_C_CMD_ExceptEventReport	= 0xB0000003, /* M->C 异常上报 */
+	M_C_CMD_DispModelData		= 0xB0000004, /* M->C 显示模型数据*/
+//	M_C_CMD_DispStatusData		= 0xB0000005, /* M->C 显示状态数据*/
+	M_C_CMD_DispUserData		= 0xB0000006, /* M->C 显示用户数据*/
+	M_C_CMD_StorModelData		= 0xB0000007, /* M->C 存储模型数据*/
+	M_C_CMD_StorUserData		= 0xB0000008, /* M->C 存储用户数据*/
+	M_C_CMD_DispAndStorData		= 0xB0000009,
+	M_C_CMD_NonRealTimeRunAdust = 0xB000000A, /* M->C 非实时运行微调*/
+	M_C_CMD_BUFFERFULL			= 0xB000000B,
+	M_C_CMD_UserPauseModel      = 0xB000000C, /* M->C 用户暂停模型*/
+	M_C_CMD_UserStopModel       = 0xB000000D, /* M->C 用户停止模型*/
+} M_C_CMD;
+
+#if 0
+
+/*BEGIN  SimuService、SimuGuard与SimuModel之间通信命令帧各字段在帧中所处的位置以及大小定义 */
+#define M_C_CMD_POS_COMMAND				0
+#define M_C_CMD_POS_SIMUMODELID			4
+#define M_C_CMD_POS_FRAMELEN			8
+#define M_C_CMD_POS_FRAMEBODY			12
+
+#define M_C_CMD_HEADER_SIZE				12
+
+#define M_C_CMD_SIZE_COMMAND			4
+#define M_C_CMD_SIZE_SIMUMODELID		4
+#define M_C_CMD_SIZE_FRAMELEN			4
+/*END  SimuService、SimuGuard与SimuModel之间通信命令帧各字段在帧中所处的位置以及大小定义 */
+
+/****************************************************************
+ * 类名 : CSimuM_CCmd
+ * 父类 : 无
+ * 说明 : SimuService、SimuGuard与SimuModel之间通信的所有命令的父类
+ ****************************************************************/
+class CSimuM_CCmd
+{
+public:
+	CSimuM_CCmd(M_C_CMD sgc);
+	virtual ~CSimuM_CCmd();
+
+	/* 预解析数据 , 获得响应的命令 */
+	static M_C_CMD PreParseCmd(unsigned char* szBuffer , unsigned long nBufferLen , unsigned long& nCmdDataLen);	
+	
+	/* 获取命令值 */
+	M_C_CMD GetCmdType() const;	
+	
+	/* 获取命令帧长度 */
+	unsigned long GetFrameLen();		
+	
+	/* 获取命令帧体长度 */
+	unsigned long GetFrameBodyLen();
+	
+	/* 设置模型ID */
+	void SetSimuModelID(unsigned long nModelId);
+
+	/* 获取模型ID */
+	unsigned long GetSimuModelID();
+
+	/* 序列化命令 */
+	virtual unsigned long Serialize(unsigned char* szBuffer);
+	
+	/* 反序列化传入的数据 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);
+
+	/* 输出打印 */
+	virtual void Print(char* szBuffer); 
+
+protected:
+	unsigned long CalcFrameLen();
+	virtual unsigned long CalcFrameBodyLen() = 0;
+
+	M_C_CMD		   m_sgc;																																													/* 命令字 */
+	unsigned long  m_nCmd;																																										/* 命令字 */
+	unsigned long  m_nFrameLen;																																					/* 命令帧体长度 */
+	unsigned long  m_nModelId;																								/* 命令保留字段4 */
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CExecSimuModelCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 1,执行仿真模型
+ ****************************************************************/
+class CSimuM_CExecSimuModelCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CExecSimuModelCmd();
+	virtual ~CSimuM_CExecSimuModelCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetParam(int nExecMode);
+	unsigned long GetParam();
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long  m_nExecMode;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CPauseSimuModelCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 2,暂停仿真模型
+ ****************************************************************/
+class CSimuM_CPauseSimuModelCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CPauseSimuModelCmd();
+	virtual ~CSimuM_CPauseSimuModelCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CResetSimuModelCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 3,重置仿真模型
+ ****************************************************************/
+class CSimuM_CResetSimuModelCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CResetSimuModelCmd();
+	virtual ~CSimuM_CResetSimuModelCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CSetSimuModelParamCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 4,设置仿真模型参数
+ ****************************************************************/
+class CSimuM_CSetSimuModelParamCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CSetSimuModelParamCmd();
+	virtual ~CSimuM_CSetSimuModelParamCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetModelParam(vector<CommuSetModelParam_t *> &vecModelParam);
+	const vector<CommuSetModelParam_t *> *GetModelParam();
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long		m_nModelParamCount;
+	vector<CommuSetModelParam_t*>	m_vecModelParam;
+};
+
+/////////////////////////////////////////////////////////////////////////////////////
+
+/****************************************************************
+ * 类名 : CSimuM_CRegisterSimuModelCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 1,注册仿真模型请求命令
+ ****************************************************************/
+class CSimuM_CRegisterSimuModelCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CRegisterSimuModelCmd();
+	virtual ~CSimuM_CRegisterSimuModelCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CTestEventReportCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 2,测试事件上报
+ ****************************************************************/
+class CSimuM_CTestEventReportCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CTestEventReportCmd();
+	virtual ~CSimuM_CTestEventReportCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetReport(CommuTestEventReport_t *pReport);
+	void SetReport(unsigned long nType, unsigned long nTaskId, unsigned long nCaseId, const char *szReport);
+	const CommuTestEventReport_t *GetReport();
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	CommuTestEventReport_t	m_Report;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CExceptEventReportCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 3,异常事件上报
+ ****************************************************************/
+class CSimuM_CExceptEventReportCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CExceptEventReportCmd();
+	virtual ~CSimuM_CExceptEventReportCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetReport(CommuExceptReport_t *pReport);
+	void SetReport(unsigned long ReportType, const char *szReport);
+	const CommuExceptReport_t *GetReport();
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	CommuExceptReport_t m_Report;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CDispModelDataCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 4,显示模型数据
+ ****************************************************************/
+class CSimuM_CDispModelDataCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CDispModelDataCmd();
+	virtual ~CSimuM_CDispModelDataCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(unsigned long step, const char *pData, unsigned long nDataLen);
+	void GetData(unsigned long *step, char *pData, unsigned long *nDataLen);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long m_ulStep;
+	unsigned long m_ulDataLen;
+	char *m_pData;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CDispStatusDataCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 5,显示状态数据 
+ ****************************************************************/
+class CSimuM_CDispStatusDataCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CDispStatusDataCmd();
+	virtual ~CSimuM_CDispStatusDataCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(unsigned long step, unsigned long nOverRun, double execTime);
+	void GetData(unsigned long *step, unsigned long *nOverRun, double *execTime);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long m_ulStep;
+	unsigned long m_ulOverRun;
+	double m_execTime;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CDispUserDataCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 6,显示用户数据	
+ ****************************************************************/
+class CSimuM_CDispUserDataCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CDispUserDataCmd();
+	virtual ~CSimuM_CDispUserDataCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(unsigned long step, const char *pData, unsigned long nDataLen);
+	void GetData(unsigned long *step, char *pData, unsigned long *nDataLen);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long m_ulStep;
+	unsigned long m_ulDataLen;
+	char *m_pData;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CStorModelDataCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 7,存储模型数据	
+ ****************************************************************/
+class CSimuM_CStorModelDataCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CStorModelDataCmd();
+	virtual ~CSimuM_CStorModelDataCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(const CommuStorModelDataUnit_t *pData);
+	void GetData(CommuStorModelDataUnit_t *pData);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	CommuStorModelDataUnit_t *m_pStorData;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CStorUserDataCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 8,存储用户数据	
+ ****************************************************************/
+class CSimuM_CStorUserDataCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CStorUserDataCmd();
+	virtual ~CSimuM_CStorUserDataCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(const CommuStorModelDataUnit_t *pData);
+	void GetData(CommuStorModelDataUnit_t *pData);
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	CommuStorModelDataUnit_t *m_pStorData;
+};
+
+/****************************************************************
+ * 类名 : CSimuM_CNonRealTimeRunAdjustCmd
+ * 父类 : CSimuM_CCmd
+ * 说明 : 9,非实时运行微调	
+ ****************************************************************/
+class CSimuM_CNonRealTimeRunAdjustCmd : public CSimuM_CCmd
+{
+public:
+	CSimuM_CNonRealTimeRunAdjustCmd();
+	virtual ~CSimuM_CNonRealTimeRunAdjustCmd();
+
+	virtual unsigned long Serialize(unsigned char* szBuffer);																											/* 序列化命令 */
+	virtual BOOL Unserialize(unsigned char* szBuffer , unsigned long nBufferLen);																	/* 反序列化传入的数据 */
+	virtual void Print(char* szBuffer); 
+
+	void SetData(unsigned long nAdjust);
+	unsigned long GetData();
+
+protected:
+	virtual unsigned long CalcFrameBodyLen();
+
+	unsigned long m_ulAdjust;
+};
+
+#endif

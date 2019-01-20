@@ -1,0 +1,29 @@
+#pragma  once
+#include "SimuCommAPI.h"
+#include "SimuDispDataC_DCmd.h"
+
+/*数据显示通信接口*/
+class CSimuDispDataC_DComm
+{
+public:
+	CSimuDispDataC_DComm();
+	virtual ~CSimuDispDataC_DComm();
+
+	bool Initialize(const char *szIp, unsigned short usPort);
+	void Uninitialize();
+
+	/*发送数据*/
+	int  SendData(unsigned char *szData, unsigned long nDataLen);
+
+private:
+	bool InitSocket(); /*初始化客户端socket信息 */
+
+private:
+	bool m_bInit;
+
+	char m_szDispIp[128];
+	unsigned short m_usPort;
+
+	SOCKET m_cltSocket;
+	CRITICAL_SECTION m_criSocket;
+};
